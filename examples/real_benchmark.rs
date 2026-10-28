@@ -13,7 +13,7 @@ use serde_json::{json, Value};
 use std::{
     collections::BTreeMap,
     fs::{self, File, OpenOptions},
-    io::{self, Read, Write},
+    io::{self, Read, Seek, Write},
     path::{Path, PathBuf},
     process::Command,
     time::{Duration, Instant},
@@ -679,24 +679,36 @@ fn actual_growth(retained: &Retained, files: &[&Frozen]) -> Result<Value> {
     let mut expected = Vec::new();
     let mut added = 0u64;
     let mut rewritten = 0usize;
+    let mut unavailable = 0usize;
     let directory = retained.workspace.path().join("actual-appends");
     private_dir(&directory)?;
     for (i, file) in files.iter().enumerate() {
-        let bytes = fs::metadata(&file.original)?.len();
+        let mut original = match File::open(&file.original) {
+            Ok(file) => file,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                unavailable += 1;
+                continue;
+            }
+            Err(error) => return Err(error.into()),
+        };
+        let bytes = original.metadata()?.len();
         if bytes <= file.bytes {
             continue;
         }
         let mut prefix = blake3::Hasher::new();
-        io::copy(
-            &mut File::open(&file.original)?.take(file.bytes),
-            &mut prefix,
-        )?;
+        io::copy(&mut original.by_ref().take(file.bytes), &mut prefix)?;
         if prefix.finalize().to_hex().as_str() != file.hash {
             rewritten += 1;
             continue;
         }
         let copy = directory.join(format!("trace-{i:05}.jsonl"));
-        copy_prefix(&file.original, &copy, bytes)?;
+        original.rewind()?;
+        let mut destination = private_file(&copy)?;
+        ensure!(
+            io::copy(&mut original.take(bytes), &mut destination)? == bytes,
+            "source truncated during observed growth capture"
+        );
+        destination.sync_all()?;
         fs::copy(&copy, &retained.inputs[i].path)?;
         expected.push(Frozen {
             provider: file.provider.clone(),
@@ -710,7 +722,7 @@ fn actual_growth(retained: &Retained, files: &[&Frozen]) -> Result<Value> {
     }
     if changed.is_empty() {
         return Ok(
-            json!({"observed_actual_appends":0,"rewritten_growing_files_not_tested":rewritten,"capture_exercised":false,"reason":"no original trace acquired an observed append during this run; no history was fabricated"}),
+            json!({"observed_actual_appends":0,"source_files_unavailable":unavailable,"rewritten_growing_files_not_tested":rewritten,"capture_exercised":false,"reason":"no original trace acquired an observed append during this run; no history was fabricated"}),
         );
     }
     let mut vault = Vault::open(&retained.workspace.path().join("archive"))?;
@@ -726,7 +738,7 @@ fn actual_growth(retained: &Retained, files: &[&Frozen]) -> Result<Value> {
     let restored = verify(&vault, &report.snapshots, &refs)?;
     let initial_still_restorable = verify(&vault, &retained.ids, files)?;
     Ok(
-        json!({"observed_actual_appends":changed.len(),"actual_new_source_bytes":added,"archive_growth_bytes":vault.stats()?.archive_bytes-before,"capture_seconds":seconds,"exact_new_version_restores":restored,"exact_initial_version_restores":initial_still_restorable,"rewritten_growing_files_not_tested":rewritten,"capture_exercised":true}),
+        json!({"observed_actual_appends":changed.len(),"actual_new_source_bytes":added,"archive_growth_bytes":vault.stats()?.archive_bytes-before,"capture_seconds":seconds,"exact_new_version_restores":restored,"exact_initial_version_restores":initial_still_restorable,"source_files_unavailable":unavailable,"rewritten_growing_files_not_tested":rewritten,"capture_exercised":true}),
     )
 }
 

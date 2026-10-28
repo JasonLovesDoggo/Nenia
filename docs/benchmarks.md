@@ -1,5 +1,11 @@
 # Archival benchmark
 
+On the measured synthetic corpus, Nenia used 70.94% less archive space than
+independent Zstd snapshots for append history and 72.06% less for shared-prefix
+forks. Independent sessions favored per-file Zstd by 5.84%; solid Zstd remained
+smaller for append history. Full-text indexing materially increased local storage
+for text workloads. All 612 final-trial snapshot restores matched the original bytes.
+
 This experiment asks whether content-defined deduplication earns its metadata
 overhead when retaining evolving agent traces. It compares Nenia with independently
 compressed snapshots and one solid Zstd stream. All candidates use Zstd level 9,
@@ -119,5 +125,128 @@ the shared source tree was being edited during compilation, so its recorded sour
 hashes may differ from the compiled executable. All original rows and the executable
 hash are retained. It motivated a bounded streaming index reader, a two-pack read
 cache, and exclusion of arbitrary binary bytes from search. No compression or
-chunking parameters changed. Final collection against a stable source checkpoint
-is pending.
+chunking parameters changed.
+
+### Final stable run
+
+The authoritative run is
+[2026-10-28-final](benchmark-results/2026-10-28-final/summary.json), collected on
+2026-10-28 from 05:25:26 to 05:25:34 UTC. It used source commit
+`0028c055067682fabd4c50d3de38ab0381cf9e55`. Source and Cargo files were checked
+against that commit before and after execution; both guards passed. Untracked
+server tests and the resource log did not participate in the example build.
+
+The machine had an AMD Ryzen 5 7640U (6 cores, 12 threads), about 22.8 GiB RAM,
+and an ext4 filesystem on a Crucial `CT1000P5PSSD8` NVMe drive. The build used
+Rust 1.88.0, release optimization with thin LTO, and Zstd 1.5.7 through the
+`zstd` 0.13.3 crate. The complete
+[environment manifest](benchmark-results/2026-10-28-final/environment.json)
+records compiler details, source hashes, executable hash, hardware, and limitations.
+
+There were 36 successful candidate batches, 612 restored snapshots, zero failed
+batches, zero retries, and zero excluded final trials. Byte sizes below are medians
+of three trials; archive metadata timestamps and device IDs cause tiny differences
+between Nenia trials. MiB means 1,048,576 bytes.
+
+| Workload | Logical history MiB | Per-file Zstd MiB | Solid Zstd MiB | Nenia archive MiB | Nenia total local MiB |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Independent | 8.011 | 1.729 | 1.815 | 1.830 | 1.916 |
+| Append history | 29.302 | 6.363 | 1.595 | 1.849 | 1.970 |
+| Shared-prefix forks | 15.009 | 3.280 | 0.915 | 0.916 | 0.991 |
+| Entropy | 8.000 | 8.001 | 8.000 | 8.008 | 8.086 |
+
+The denominator is the sum of all retained versions, not the size of the latest
+source files. Append history's final source files totaled 7,093,684 bytes; all
+retained versions totaled 30,725,602 bytes. This distinction matters when
+interpreting its 15.85:1 logical-history-to-archive ratio.
+
+Exact Nenia components and optional index costs:
+
+| Workload | Archive bytes | Catalog bytes | Total local bytes | Added FTS bytes | Total with FTS bytes |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Independent | 1,918,825 | 90,112 | 2,009,034 | 2,437,120 | 4,446,154 |
+| Append history | 1,938,445 | 126,976 | 2,065,518 | 6,914,048 | 8,979,566 |
+| Shared-prefix forks | 960,990 | 77,824 | 1,038,911 | 3,211,264 | 4,250,175 |
+| Entropy | 8,397,123 | 81,920 | 8,479,140 | 0 | 8,479,140 |
+
+Local totals include 97 bytes of configuration in addition to archive and catalog.
+Nenia archive ranges were 1,918,795–1,918,825 bytes for independent sessions,
+1,938,381–1,938,518 for append history, 960,989–960,994 for forks, and
+8,397,118–8,397,128 for entropy. Baseline sizes were identical across trials.
+The entropy index still records searchable path metadata; it added no additional
+database file bytes. Text indexing is optional and remains much more expensive
+than the archive alone on this corpus.
+
+Completed-batch ingestion timing, in milliseconds, is shown as median [minimum,
+maximum] across three independent trials. These are not latency percentiles.
+
+| Workload | Per-file Zstd ms | Solid Zstd ms | Nenia ms | Nenia input MiB/s |
+| --- | ---: | ---: | ---: | ---: |
+| Independent | 97.84 [96.90, 104.69] | 89.83 [86.78, 91.36] | 152.36 [151.76, 154.66] | 52.58 |
+| Append history | 323.23 [316.67, 328.95] | 108.75 [103.81, 115.01] | 253.63 [248.44, 258.35] | 115.53 |
+| Shared-prefix forks | 162.88 [162.52, 163.58] | 56.64 [56.57, 57.71] | 116.73 [113.98, 127.95] | 128.57 |
+| Entropy | 23.34 [22.11, 24.49] | 19.31 [18.84, 20.14] | 55.57 [52.74, 56.11] | 143.95 |
+
+Optional index median times were 0.100 s, 0.442 s, 0.156 s, and 0.018 s,
+respectively. These measurements include the index work described above and are
+separate from ingestion. The
+[process resource record](benchmark-results/2026-10-28-final-resource.txt)
+reports 8.13 seconds overall, 5.97 seconds user CPU, 1.11 seconds system CPU,
+and 147,308 KiB maximum RSS. That process holds generated fixtures and restores
+for all candidates; its RSS is not a measurement of the standalone Nenia client's
+memory use. No major page faults were observed, consistent with the intentionally
+warm input-cache setup.
+
+The predeclared storage decision passed: append and fork savings both exceed 20%,
+and entropy archive overhead versus per-file Zstd was 0.095%, below 5%. This
+supports retaining deduplication for these repeated-history cases. It does not
+support a universal compression claim: Nenia was 5.84% larger than per-file Zstd
+on independent sessions, while solid Zstd was about 13.70% smaller than Nenia on
+append history. Nenia pays that difference for bounded independently addressed
+packs and incremental snapshots; random-access and remote-transfer benefits were
+not measured here.
+
+A future isolated chunk-size experiment could examine append tails: retained
+unique chunks occupied 8,623,153 raw bytes versus 7,093,684 final-source bytes,
+about 21.6% extra. Smaller chunks might reduce that tail duplication while adding
+manifest and catalog overhead. That is a hypothesis, not a result of this matrix.
+No chunk-size changes were made after viewing the measurements.
+
+### Exact commands and summary regeneration
+
+The full command history, including the smoke and exploratory runs, is in
+[commands.txt](benchmark-results/commands.txt). Final collection used:
+
+```sh
+/home/json/.cargo/bin/cargo build --release --example benchmark
+git diff --exit-code 0028c055067682fabd4c50d3de38ab0381cf9e55 -- Cargo.toml Cargo.lock src examples/benchmark.rs
+PATH=/home/json/.cargo/bin:$PATH /usr/bin/time -v -o docs/benchmark-results/2026-10-28-final-resource.txt target/release/examples/benchmark --output docs/benchmark-results/2026-10-28-final --trials 3
+git diff --exit-code 0028c055067682fabd4c50d3de38ab0381cf9e55 -- Cargo.toml Cargo.lock src examples/benchmark.rs
+```
+
+Use a new output path when rerunning. The existing raw evidence is intentionally
+preserved. The tables can be recomputed from
+[samples.jsonl](benchmark-results/2026-10-28-final/samples.jsonl):
+
+```sh
+python3 - <<'PY'
+import json, statistics
+from collections import defaultdict
+groups = defaultdict(list)
+with open('docs/benchmark-results/2026-10-28-final/samples.jsonl') as file:
+    for line in file:
+        row = json.loads(line)
+        assert row['errors'] == 0 and row['restored_snapshots'] == row['snapshots']
+        assert row['archive_bytes'] == row['payload_bytes'] + row['manifest_bytes']
+        groups[row['case'], row['candidate']].append(row)
+for group, rows in sorted(groups.items()):
+    fields = ['input_bytes', 'archive_bytes', 'catalog_bytes', 'total_bytes',
+              'added_index_bytes', 'indexed_total_bytes', 'index_seconds']
+    result = {key: statistics.median(r[key] for r in rows)
+              for key in fields if rows[0][key] is not None}
+    times = [r['elapsed_seconds'] for r in rows]
+    result['seconds_min_median_max'] = [min(times), statistics.median(times), max(times)]
+    result['input_mib_per_second'] = rows[0]['input_bytes'] / 1048576 / statistics.median(times)
+    print(group, result)
+PY
+```

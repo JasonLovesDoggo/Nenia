@@ -1,0 +1,81 @@
+{
+  "arch": "x86_64",
+  "available_parallelism": 12,
+  "cgroup_cpu_max": null,
+  "cgroup_memory_max": null,
+  "command": [
+    "target/release/examples/benchmark",
+    "--output",
+    "docs/benchmark-results/2026-10-28-final",
+    "--trials",
+    "3"
+  ],
+  "cpu": {
+    "status": 0,
+    "stderr": "",
+    "stdout": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           48 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  12\nOn-line CPU(s) list:                     0-11\nVendor ID:                               AuthenticAMD\nModel name:                              AMD Ryzen 5 7640U w/ Radeon 760M Graphics\nCPU family:                              25\nModel:                                   116\nThread(s) per core:                      2\nCore(s) per socket:                      6\nSocket(s):                               1\nStepping:                                1\nFrequency boost:                         enabled\nCPU(s) scaling MHz:                      46%\nCPU max MHz:                             4971.0000\nCPU min MHz:                             400.0000\nBogoMIPS:                                6986.56\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid overflow_recov succor smca fsrm flush_l1d amd_lbr_pmc_freeze\nVirtualization:                          AMD-V\nL1d cache:                               192 KiB (6 instances)\nL1i cache:                               192 KiB (6 instances)\nL2 cache:                                6 MiB (6 instances)\nL3 cache:                                16 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-11\nVulnerability Gather data sampling:      Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Mitigation; Safe RET\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; STIBP always-on; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Mitigation; Clear CPU buffers\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB before exit to userspace\n"
+  },
+  "created_at": "2026-10-28T05:25:26.425054298+00:00",
+  "executable_blake3": "c3def824c45ed8d92f1e64e9438e54607d455583ae629759fbd0c834a2e378e9",
+  "filesystem": {
+    "status": 0,
+    "stderr": "",
+    "stdout": "Filesystem     Type 1K-blocks     Used Available Use% Mounted on\n/dev/nvme0n1p2 ext4 935262988 93837584 793842992  11% /\n"
+  },
+  "git": {
+    "status": 0,
+    "stderr": "",
+    "stdout": "0028c055067682fabd4c50d3de38ab0381cf9e55\n"
+  },
+  "git_status": {
+    "status": 0,
+    "stderr": "",
+    "stdout": "?? docs/benchmark-results/2026-10-28-final-resource.txt\n?? tests/server.rs\n"
+  },
+  "level": 9,
+  "limitations": [
+    "OS cache not dropped; fresh archive directories, warm source data",
+    "Concurrent development/build work and host interference are uncontrolled",
+    "Short batch throughput, not sustained service capacity",
+    "File lengths, not allocated filesystem blocks or object-store billing",
+    "Power and thermal state are uncontrolled; physical persistence was not crash-tested"
+  ],
+  "memory": {
+    "status": 0,
+    "stderr": "",
+    "stdout": "               total        used        free      shared  buff/cache   available\nMem:     24471666688  5595398144  2325168128  1080209408 18042163200 18876268544\nSwap:    25027407872   425041920 24602365952\n"
+  },
+  "os": "linux",
+  "rustc": {
+    "status": 0,
+    "stderr": "",
+    "stdout": "rustc 1.88.0 (6b00bc388 2025-06-23)\nbinary: rustc\ncommit-hash: 6b00bc3880198600130e1cf62b8f8a93494488cc\ncommit-date: 2025-06-23\nhost: x86_64-unknown-linux-gnu\nrelease: 1.88.0\nLLVM version: 20.1.5\n"
+  },
+  "scale": 1.0,
+  "seed": "4e454e4941323032",
+  "source_blake3": {
+    "Cargo.lock": "27a5868f024a0b1fcf5662772ef04f2b88defed633feeb9b1c66e05a41cefaae",
+    "Cargo.toml": "2ff2b67c7ce0160894a037cff4bd9ebdf87e65a87f1e771e4c5eb064c78394a7",
+    "examples/benchmark.rs": "4f1b18206d08f14269eb8479564d29133cd3458c96b4915936287fb4eda7c268",
+    "src/adapters.rs": "80f5db7818e5b4f3203d7b2ed78dce73b14928262348e6ba69f957099ce514ab",
+    "src/lib.rs": "d323dc47cabc2add7861436e093010d3828282db0fdf4ba630af3e30bd1f4e5e",
+    "src/main.rs": "74ae7e81c1b122cc2d3df98b6bd3a1c9394316cbd8c3c4075adf750f433ca2a3",
+    "src/pack.rs": "203cc68a0532df1d745bc5513bdd31fcd10f555f6d15083ebe96967c686f10ed",
+    "src/remote.rs": "20a2572e6127182af40b3b148810f87ba0123b3e6bb1204a1a6bfd1f85ab9846",
+    "src/server.rs": "0fa273b581920b743e819b0cbe4657b3fb6a23b7b7a6f5f2626ea94ff783b321",
+    "src/vault.rs": "91baf118cdc090e75f4db05a9dae65abdfa20b68101161e859f38c812bce832c"
+  },
+  "storage_devices": {
+    "status": 0,
+    "stderr": "",
+    "stdout": "NAME    MODEL         ROTA\nnvme0n1 CT1000P5PSSD8    0\n"
+  },
+  "trials": 3,
+  "uname": {
+    "status": 0,
+    "stderr": "",
+    "stdout": "Linux framework 6.12.111+deb13-amd64 #1 SMP PREEMPT_DYNAMIC Debian 6.12.111-1 (2026-09-28) x86_64 GNU/Linux\n"
+  },
+  "zstd_version": "1.5.7",
+  "zstd_window_log": 23
+}

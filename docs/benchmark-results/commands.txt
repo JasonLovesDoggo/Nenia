@@ -13,3 +13,17 @@ The first full run is exploratory: source files were concurrently edited while
 the release binary was being built. Its executable hash is retained, but runtime
 source hashes may differ from what was compiled. Final results require a stable
 source checkpoint. No successful rows have been removed.
+
+Final stable collection (source commit 0028c055067682fabd4c50d3de38ab0381cf9e55):
+
+git rev-parse HEAD
+git status --short
+/home/json/.cargo/bin/cargo build --release --example benchmark
+git diff --exit-code 0028c055067682fabd4c50d3de38ab0381cf9e55 -- Cargo.toml Cargo.lock src examples/benchmark.rs
+PATH=/home/json/.cargo/bin:$PATH /usr/bin/time -v -o docs/benchmark-results/2026-10-28-final-resource.txt target/release/examples/benchmark --output docs/benchmark-results/2026-10-28-final --trials 3
+git diff --exit-code 0028c055067682fabd4c50d3de38ab0381cf9e55 -- Cargo.toml Cargo.lock src examples/benchmark.rs
+
+Both source guards passed. The source was frozen throughout build and collection.
+36 successful final candidate batches, 612 byte-exact snapshot restores, zero errors.
+Main report includes a Python command that recomputes component sizes and timing
+summaries directly from retained samples.jsonl.

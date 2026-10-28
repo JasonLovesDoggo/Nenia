@@ -1,0 +1,9 @@
+{
+  "verified_files": 268,
+  "verified_native_bytes": 414576373,
+  "sha256_mismatches": 0,
+  "unlisted_trace_files": 0,
+  "native_zstd_files": 251,
+  "raw_jsonl_files": 17,
+  "native_bytes_preserved": true
+}

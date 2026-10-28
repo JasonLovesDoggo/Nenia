@@ -1,0 +1,52 @@
+{
+  "arch": "x86_64",
+  "executable_blake3": "a5b792da0faa93a027778c6be7ff071c40826b34c4d4a96150b64c76f84bd20c",
+  "level": 9,
+  "limitations": [
+    "shared development host, power/thermal state uncontrolled",
+    "file lengths, not filesystem allocated blocks or cloud billing",
+    "short batch throughput, not sustained service capacity",
+    "baseline recovery mapping published at final completion, Nenia per ingestion transaction",
+    "all source mappings, filenames, content hashes, credentials and objects remain outside the repository"
+  ],
+  "logical_cpus": 12,
+  "os": "linux",
+  "private_trace_details_in_report": false,
+  "rustc": "rustc 1.88.0 (6b00bc388 2025-06-23)\nbinary: rustc\ncommit-hash: 6b00bc3880198600130e1cf62b8f8a93494488cc\ncommit-date: 2025-06-23\nhost: x86_64-unknown-linux-gnu\nrelease: 1.88.0\nLLVM version: 20.1.5",
+  "source_code_blake3": [
+    [
+      "Cargo.toml",
+      "2a9c1a4719e208592e97b83c80a7dfae75d27bcb0d2514de3787a98c5f97082f"
+    ],
+    [
+      "Cargo.lock",
+      "9321f01f9ecd461834664784bf2b51b58586b54c1e851b4d12ab680ee1808c2d"
+    ],
+    [
+      "src/pack.rs",
+      "203cc68a0532df1d745bc5513bdd31fcd10f555f6d15083ebe96967c686f10ed"
+    ],
+    [
+      "src/vault.rs",
+      "91baf118cdc090e75f4db05a9dae65abdfa20b68101161e859f38c812bce832c"
+    ],
+    [
+      "src/adapters.rs",
+      "80f5db7818e5b4f3203d7b2ed78dce73b14928262348e6ba69f957099ce514ab"
+    ],
+    [
+      "src/remote.rs",
+      "20a2572e6127182af40b3b148810f87ba0123b3e6bb1204a1a6bfd1f85ab9846"
+    ],
+    [
+      "examples/real_benchmark.rs",
+      "701ab653c912e2095275d52783f935c5f9e537c9f28d9364f13aff799e80e6be"
+    ]
+  ],
+  "source_commit": "93de9ffb39dd499777fc05cd6850ddebd867c7a9",
+  "started_at": "2026-10-28T06:13:27.238720161+00:00",
+  "state": "fresh archives, frozen actual files, warm source cache; no cold-storage claim",
+  "trials": 3,
+  "window_log": 23,
+  "zstd_version": "1.5.7"
+}

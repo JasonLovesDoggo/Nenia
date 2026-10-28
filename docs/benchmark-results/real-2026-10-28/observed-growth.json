@@ -1,0 +1,10 @@
+{
+  "actual_new_source_bytes": 1878159,
+  "archive_growth_bytes": 762106,
+  "capture_exercised": true,
+  "capture_seconds": 0.082649261,
+  "exact_initial_version_restores": 74,
+  "exact_new_version_restores": 8,
+  "observed_actual_appends": 8,
+  "rewritten_growing_files_not_tested": 0
+}

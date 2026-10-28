@@ -1,0 +1,34 @@
+{
+  "capture": "each source copied through its observed initial length; no invented records or histories",
+  "captured_at": "2026-10-28T06:09:47.674873244+00:00",
+  "empty_files_skipped": 0,
+  "private_source_details_published": false,
+  "provenance": "all nonempty JSONL files under local Codex sessions and Claude projects stores",
+  "providers": {
+    "claude": {
+      "bytes": 2332703,
+      "files": 2,
+      "max_bytes": 2166911,
+      "median_bytes": 1166351.5,
+      "min_bytes": 165792,
+      "p90_bytes": 2166911
+    },
+    "codex": {
+      "bytes": 357091688,
+      "files": 72,
+      "max_bytes": 158856579,
+      "median_bytes": 1200197.0,
+      "min_bytes": 49856,
+      "p90_bytes": 6808804
+    },
+    "combined": {
+      "bytes": 359424391,
+      "files": 74,
+      "max_bytes": 158856579,
+      "median_bytes": 1200197.0,
+      "min_bytes": 49856,
+      "p90_bytes": 6808804
+    }
+  },
+  "sources_growing_during_copy": 0
+}

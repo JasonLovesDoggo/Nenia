@@ -285,15 +285,39 @@ async fn official_events_capture_only_the_requested_transcript_and_restore_remot
 #[tokio::test]
 async fn busy_vault_and_failed_capture_keep_the_final_event_for_retry() {
     let _serial = TEST_LOCK.lock().await;
+    #[cfg(windows)]
+    let _watchdog = {
+        struct Guard(std::sync::Arc<std::sync::atomic::AtomicBool>);
+        impl Drop for Guard {
+            fn drop(&mut self) {
+                self.0.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+        }
+        let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let finished = done.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(30));
+            if !finished.load(std::sync::atomic::Ordering::SeqCst) {
+                eprintln!("zero-timeout hook recovery exceeded 30 seconds");
+                std::process::abort();
+            }
+        });
+        Guard(done)
+    };
+    eprintln!("hook recovery: initialize");
     let f = Fixture::new();
     let source = f.trace("session.jsonl", b"queued while vault busy\n");
     let held = Vault::open(&f.vault).unwrap();
+    eprintln!("hook recovery: queue while vault is held");
     f.queue(&source, "SessionEnd");
+    eprintln!("hook recovery: drain with zero timeout");
     assert!(hooks::drain(&f.vault, Duration::ZERO).await.is_err());
+    eprintln!("hook recovery: release vault");
     assert_eq!(f.queued(), 1);
     drop(held);
     fs::remove_file(&source).unwrap();
     assert!(hooks::drain(&f.vault, Duration::ZERO).await.is_err());
+    eprintln!("hook recovery: retry available source");
     assert_eq!(f.queued(), 1);
     fs::write(&source, b"trace is accessible again\n").unwrap();
     assert_eq!(
@@ -304,6 +328,7 @@ async fn busy_vault_and_failed_capture_keep_the_final_event_for_retry() {
         1
     );
     assert_eq!(f.queued(), 0);
+    eprintln!("hook recovery: complete");
 }
 
 #[tokio::test]

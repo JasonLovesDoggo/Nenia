@@ -38,7 +38,8 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo clippy --locked --all-targets -- -D warnings
       - name: Tests including real CLI and HTTP server
-        run: cargo test --locked --all-targets
+        timeout-minutes: 8
+        run: cargo test --locked --all-targets -- --nocapture
       - name: Build release binary
         run: cargo build --locked --release --bin nenia
       - name: Package binary

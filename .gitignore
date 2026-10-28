@@ -36,4 +36,5 @@ vault.lock
 /raw-traces/
 /traces/
 /sessions/
+codex-sessions-from-mac-*
 

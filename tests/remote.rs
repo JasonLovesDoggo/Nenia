@@ -27,6 +27,7 @@ impl Fixture {
         )
         .unwrap();
         let manifest = Manifest {
+            revision: 1,
             version: 1,
             device_id: "test-device".into(),
             origin: "laptop:session.jsonl".into(),
@@ -472,7 +473,7 @@ async fn symlink_objects_and_directories_cannot_escape_archive_root() {
 mod http {
     use super::*;
     use axum::body::Bytes;
-    use axum::extract::{Path as HttpPath, State};
+    use axum::extract::{Path as HttpPath, Query, State};
     use axum::http::{HeaderMap, StatusCode};
     use axum::routing::get;
     use axum::{Json, Router};
@@ -580,6 +581,139 @@ mod http {
         }
     }
 
+    type ObservedQueries = Arc<Mutex<Vec<BTreeMap<String, String>>>>;
+
+    async fn paged_server(
+        pages: Vec<serde_json::Value>,
+        fixture: Option<&Fixture>,
+    ) -> (String, ObservedQueries, tokio::task::JoinHandle<()>) {
+        let objects = Objects::default();
+        if let Some(fixture) = fixture {
+            let mut stored = objects.lock().unwrap();
+            stored.insert(
+                ("packs".into(), fixture.pack.clone()),
+                fs::read(fixture.root().join(fixture.pack_key())).unwrap(),
+            );
+            stored.insert(
+                ("manifests".into(), fixture.manifest.clone()),
+                fs::read(fixture.root().join(fixture.manifest_key())).unwrap(),
+            );
+        }
+        let pages = Arc::new(pages);
+        let observed = ObservedQueries::default();
+        let handler_observed = observed.clone();
+        let router = Router::new()
+            .route(
+                "/v1/objects",
+                get(move |Query(query): Query<BTreeMap<String, String>>| {
+                    let pages = pages.clone();
+                    let observed = handler_observed.clone();
+                    async move {
+                        let mut observed = observed.lock().unwrap();
+                        let index = observed.len();
+                        observed.push(query);
+                        Json(pages[index.min(pages.len() - 1)].clone())
+                    }
+                }),
+            )
+            .route("/v1/{kind}/{id}", get(get_blob).put(put_blob))
+            .with_state(objects);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let remote = format!("http://{}", listener.local_addr().unwrap());
+        let task = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        (remote, observed, task)
+    }
+
+    #[tokio::test]
+    async fn paged_inventory_collects_dependencies_before_downloading_manifests() {
+        let fixture = Fixture::new();
+        let pages = vec![
+            serde_json::json!({"packs":[fixture.pack],"manifests":[],"next_after":1,"watermark":2,"generation":"original"}),
+            serde_json::json!({"packs":[],"manifests":[fixture.manifest],"next_after":null,"watermark":2,"generation":"original"}),
+        ];
+        let (remote, queries, task) = paged_server(pages, Some(&fixture)).await;
+        let destination = tempdir().unwrap();
+        assert_eq!(
+            pull(destination.path(), &remote, &options())
+                .await
+                .unwrap()
+                .transferred_objects,
+            2
+        );
+        assert_eq!(
+            fs::read(destination.path().join(fixture.manifest_key())).unwrap(),
+            fs::read(fixture.root().join(fixture.manifest_key())).unwrap()
+        );
+        let queries = queries.lock().unwrap();
+        assert_eq!(queries.len(), 2);
+        assert_eq!(queries[0].get("limit").unwrap(), "4096");
+        assert!(!queries[0].contains_key("watermark"));
+        assert_eq!(queries[1].get("after").unwrap(), "1");
+        assert_eq!(queries[1].get("watermark").unwrap(), "2");
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn inconsistent_inventory_pagination_fails_without_publishing_objects() {
+        let first = serde_json::json!({"packs":[],"manifests":[],"next_after":1,"watermark":3,"generation":"original"});
+        let cases = [
+            (
+                "cursor",
+                vec![serde_json::json!({"packs":[],"manifests":[],"next_after":0,"watermark":3})],
+            ),
+            ("cursor", vec![first.clone(), first.clone()]),
+            (
+                "watermark",
+                vec![serde_json::json!({"packs":[],"manifests":[],"next_after":1})],
+            ),
+            (
+                "watermark",
+                vec![serde_json::json!({"packs":[],"manifests":[],"next_after":4,"watermark":3})],
+            ),
+            (
+                "watermark",
+                vec![
+                    first.clone(),
+                    serde_json::json!({"packs":[],"manifests":[],"next_after":null,"watermark":4,"generation":"original"}),
+                ],
+            ),
+            (
+                "watermark",
+                vec![
+                    first.clone(),
+                    serde_json::json!({"packs":[],"manifests":[],"next_after":null,"generation":"original"}),
+                ],
+            ),
+            (
+                "generation",
+                vec![
+                    first.clone(),
+                    serde_json::json!({"packs":[],"manifests":[],"next_after":null,"watermark":3,"generation":"rebuilt"}),
+                ],
+            ),
+            (
+                "generation",
+                vec![
+                    first,
+                    serde_json::json!({"packs":[],"manifests":[],"next_after":null,"watermark":3}),
+                ],
+            ),
+        ];
+        for (message, pages) in cases {
+            let (remote, _, task) = paged_server(pages, None).await;
+            let destination = tempdir().unwrap();
+            let error = pull(destination.path(), &remote, &options())
+                .await
+                .unwrap_err();
+            assert!(
+                format!("{error:#}").contains(message),
+                "unexpected error: {error:#}"
+            );
+            assert_eq!(fs::read_dir(destination.path()).unwrap().count(), 0);
+            task.abort();
+        }
+    }
+
     #[tokio::test]
     async fn http_auth_prefix_roundtrip_idempotency_and_publication_order() {
         let fixture = Fixture::new();
@@ -671,6 +805,18 @@ mod http {
                 .transferred_objects,
             2
         );
+        // A stale catalog entry must not make a normal inventory-trusting backup
+        // skip an object that has disappeared from the server filesystem.
+        let server_pack = server_directory.path().join(fixture.pack_key());
+        fs::remove_file(&server_pack).unwrap();
+        let fast = SyncOptions {
+            verify_existing: false,
+            ..options.clone()
+        };
+        let repaired = push(fixture.root(), &remote, &fast).await.unwrap();
+        assert_eq!(repaired.transferred_objects, 1);
+        assert_eq!(repaired.existing_objects, 1);
+        assert!(server_pack.is_file());
         let mut restored = nenia::vault::Vault::init(destination.path(), 3).unwrap();
         pull(destination.path(), &remote, &options).await.unwrap();
         assert_eq!(restored.rebuild().unwrap(), 1);

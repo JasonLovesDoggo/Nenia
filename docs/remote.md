@@ -124,7 +124,15 @@ is capped at 8 MiB + 64 KiB; each encoded manifest and HTTP inventory response i
 capped at 64 MiB. Body limits apply while streaming even if the server supplies an
 incorrect or absent Content-Length. Memory scales with in-flight objects, manifest
 decoding, and the inventory of object names; inventory metadata remains O(number
-of objects). This implementation does not paginate its HTTP inventory.
+of objects).
+
+HTTP inventories use pages of up to 4,096 objects. An initial sequence watermark
+keeps later uploads outside that inventory, and a catalog generation identifies
+rebuilds. The client retains the watermark across pages and rejects nonadvancing
+cursors or a changed generation. Missing files are omitted even if their old
+catalog entries remain, so repeating a backup can upload them again. The 64 MiB
+response limit applies to each page, not the entire archive inventory. Older
+unpaged responses remain readable within that per-response limit.
 
 S3 operations use the backend's retry policy. HTTP connection failures, timeouts,
 408, 429, and server errors retry up to three times with exponential backoff;

@@ -167,6 +167,74 @@ enum Backend {
 struct HttpInventory {
     packs: Vec<String>,
     manifests: Vec<String>,
+    #[serde(default)]
+    next_after: Option<i64>,
+    #[serde(default)]
+    watermark: Option<i64>,
+    #[serde(default)]
+    generation: Option<String>,
+}
+
+async fn http_inventory(client: &reqwest::Client, base: &Url) -> Result<Inventory> {
+    let mut inventory = Inventory::new();
+    let mut after = 0_i64;
+    let mut watermark: Option<i64> = None;
+    let mut generation: Option<String> = None;
+    for page_number in 0..1_000_000 {
+        let mut url = base.join("v1/objects")?;
+        url.query_pairs_mut().append_pair("limit", "4096");
+        if page_number > 0 {
+            url.query_pairs_mut()
+                .append_pair("after", &after.to_string())
+                .append_pair(
+                    "watermark",
+                    &watermark
+                        .context("paged inventory omitted watermark")?
+                        .to_string(),
+                );
+        }
+        let response = send_http(client.get(url)).await?;
+        let bytes = read_http_body(response, MAX_MANIFEST_BYTES).await?;
+        let objects: HttpInventory =
+            serde_json::from_slice(&bytes).context("invalid remote inventory")?;
+        if page_number == 0 {
+            watermark = objects.watermark;
+            generation = objects.generation.clone();
+            ensure!(
+                watermark.is_none_or(|value| value >= 0),
+                "inventory watermark must not be negative"
+            );
+        } else {
+            ensure!(
+                objects.watermark == watermark,
+                "inventory watermark changed during pagination"
+            );
+            ensure!(objects.generation == generation, "inventory generation changed during pagination; retry after server recovery completes");
+        }
+        if let Some(next) = objects.next_after {
+            ensure!(next > after, "inventory cursor did not advance");
+            ensure!(
+                next <= watermark.context("paged inventory omitted watermark")?,
+                "inventory cursor exceeds watermark"
+            );
+        }
+        for (kind, ids) in [
+            (Kind::Pack, objects.packs),
+            (Kind::Manifest, objects.manifests),
+        ] {
+            for id in ids {
+                let key = format!("{}/{id}{}", kind.directory(), kind.extension());
+                let object =
+                    Object::parse(&key, None).context("invalid hash in remote inventory")?;
+                inventory.insert(key, object);
+            }
+        }
+        match objects.next_after {
+            Some(next) => after = next,
+            None => return Ok(inventory),
+        }
+    }
+    bail!("inventory exceeded one million pages")
 }
 
 impl Remote {
@@ -285,22 +353,7 @@ impl Remote {
         let store = match &self.backend {
             Backend::ObjectStore(store) => store,
             Backend::Http { client, base } => {
-                let response = send_http(client.get(base.join("v1/objects")?)).await?;
-                let bytes = read_http_body(response, MAX_MANIFEST_BYTES).await?;
-                let objects: HttpInventory =
-                    serde_json::from_slice(&bytes).context("invalid remote inventory")?;
-                for (kind, ids) in [
-                    (Kind::Pack, objects.packs),
-                    (Kind::Manifest, objects.manifests),
-                ] {
-                    for id in ids {
-                        let key = format!("{}/{id}{}", kind.directory(), kind.extension());
-                        let object = Object::parse(&key, None)
-                            .context("invalid hash in remote inventory")?;
-                        inventory.insert(key, object);
-                    }
-                }
-                return Ok(inventory);
+                return http_inventory(client, base).await;
             }
         };
         let prefix = ObjectPath::from(self.prefix.trim_end_matches('/'));

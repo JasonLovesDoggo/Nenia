@@ -9,12 +9,13 @@ use anyhow::{bail, ensure, Context, Result};
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+#[cfg(not(windows))]
+use std::process::{Command, Stdio};
 use std::{
     collections::{BTreeMap, HashSet},
     fs::{self, File, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
     time::Duration,
 };
 
@@ -383,7 +384,9 @@ pub fn wake_worker(root: &Path, executable: &Path) -> Result<bool> {
         Err(error) if lock_busy(&error) => return Ok(false),
         Err(error) => return Err(error.into()),
     }
+    #[cfg(not(windows))]
     let mut command = Command::new(executable);
+    #[cfg(not(windows))]
     command
         .arg("--vault")
         .arg(fs::canonicalize(root)?)
@@ -405,15 +408,12 @@ pub fn wake_worker(root: &Path, executable: &Path) -> Result<bool> {
             });
         }
     }
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP; all standard handles are null.
-        command.creation_flags(0x00000008 | 0x00000200);
-    }
     // Release the reservation before exec: a child can start before spawn returns.
     // The queue gate still prevents a producer/worker-exit race during this handoff.
     drop(worker);
+    #[cfg(windows)]
+    crate::windows_worker::spawn(executable, &fs::canonicalize(root)?)?;
+    #[cfg(not(windows))]
     command
         .spawn()
         .context("start detached backup worker; queued event remains safe")?;

@@ -353,6 +353,95 @@ async fn unsafe_urls_and_invalid_concurrency_fail_without_network_access() {
     }
 }
 
+/// Run against an explicitly configured local S3 emulator, never a cloud account.
+#[tokio::test]
+#[ignore = "requires local Moto/MinIO, AWS_ENDPOINT and NENIA_TEST_S3_REMOTE"]
+async fn s3_emulator_roundtrip_races_corruption_and_missing_dependencies() {
+    use object_store::{aws::AmazonS3Builder, path::Path as ObjectPath, ObjectStore};
+    let endpoint = std::env::var("AWS_ENDPOINT").expect("set a localhost AWS_ENDPOINT");
+    let endpoint = url::Url::parse(&endpoint).unwrap();
+    assert!(
+        endpoint.host_str().is_some_and(|host| host == "localhost"
+            || host
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|address| address.is_loopback())),
+        "this destructive corruption test only accepts a local emulator"
+    );
+    let remote = std::env::var("NENIA_TEST_S3_REMOTE").expect("set s3://test-bucket/test-prefix");
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let remote = format!(
+        "{}/run-{}-{unique}",
+        remote.trim_end_matches('/'),
+        std::process::id()
+    );
+    let parsed = url::Url::parse(&remote).unwrap();
+    assert_eq!(parsed.scheme(), "s3");
+    let store = AmazonS3Builder::from_env()
+        .with_bucket_name(parsed.host_str().unwrap())
+        .build()
+        .unwrap();
+    let fixture = Fixture::new();
+    let options = SyncOptions::default();
+    let (first, racing) = futures::try_join!(
+        push(fixture.root(), &remote, &options),
+        push(fixture.root(), &remote, &options)
+    )
+    .unwrap();
+    assert_eq!(first.transferred_objects + racing.transferred_objects, 2);
+    assert_eq!(first.existing_objects + racing.existing_objects, 2);
+    assert_eq!(
+        push(fixture.root(), &remote, &options)
+            .await
+            .unwrap()
+            .verified_existing_objects,
+        2
+    );
+    let destination = tempdir().unwrap();
+    assert_eq!(
+        pull(destination.path(), &remote, &options)
+            .await
+            .unwrap()
+            .transferred_objects,
+        2
+    );
+    for key in [fixture.pack_key(), fixture.manifest_key()] {
+        assert_eq!(
+            fs::read(fixture.root().join(&key)).unwrap(),
+            fs::read(destination.path().join(key)).unwrap()
+        );
+    }
+    let pack_key = ObjectPath::from(format!(
+        "{}/{}",
+        parsed.path().trim_matches('/'),
+        fixture.pack_key()
+    ));
+    let mut corrupted = fs::read(fixture.root().join(fixture.pack_key())).unwrap();
+    corrupted[0] ^= 1;
+    store.put(&pack_key, corrupted.into()).await.unwrap();
+    let error = push(fixture.root(), &remote, &options).await.unwrap_err();
+    assert!(format!("{error:#}").contains("hash mismatch"));
+    let clean_destination = tempdir().unwrap();
+    assert!(pull(clean_destination.path(), &remote, &options)
+        .await
+        .is_err());
+    assert!(!clean_destination
+        .path()
+        .join(fixture.manifest_key())
+        .exists());
+    store.delete(&pack_key).await.unwrap();
+    let error = pull(clean_destination.path(), &remote, &options)
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("missing pack"));
+    assert!(!clean_destination
+        .path()
+        .join(fixture.manifest_key())
+        .exists());
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn symlink_objects_and_directories_cannot_escape_archive_root() {

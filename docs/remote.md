@@ -134,7 +134,26 @@ verification downloads, retry traffic, or total bandwidth.
 The automated suite exercises file round trips, idempotency, corrupt sources and
 destinations, missing dependencies, oversize rejection, symlink rejection, HTTP
 authentication, redirects, retries, and restore through the actual Nenia server.
+An additional S3 protocol test passed against Moto 5.2.5 on localhost: concurrent
+uploads, idempotency, exact restore, corrupt objects, and missing dependencies.
 Real AWS and R2 accounts have not been exercised in this environment. Provider
 permissions, credential refresh, TLS/proxy setup, cold-storage retrieval, and
 provider-specific conditional-write behavior still need validation in the target
 deployment. No cloud resources were created by development tests.
+
+To rerun the S3 test, install `moto[server]` in a Python virtual environment and
+start `moto_server -H 127.0.0.1 -p 5001`. In another terminal using that environment:
+
+```sh
+export AWS_ENDPOINT=http://127.0.0.1:5001
+export AWS_ALLOW_HTTP=true
+export AWS_ACCESS_KEY_ID=testing
+export AWS_SECRET_ACCESS_KEY=testing
+export AWS_REGION=us-east-1
+export NENIA_TEST_S3_REMOTE=s3://nenia-test/tests
+python -c 'import boto3; boto3.client("s3", endpoint_url="http://127.0.0.1:5001").create_bucket(Bucket="nenia-test")'
+cargo test --test remote s3_emulator -- --ignored
+```
+
+The test creates a unique prefix and deliberately corrupts and removes its own
+objects. It refuses non-loopback endpoints and is ignored by normal `cargo test`.

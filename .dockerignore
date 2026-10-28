@@ -1,0 +1,7 @@
+# Send only build inputs, never local traces, tokens, vaults, or Git history.
+**
+!Cargo.toml
+!Cargo.lock
+!Dockerfile
+!src/
+!src/**

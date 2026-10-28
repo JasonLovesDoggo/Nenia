@@ -1,0 +1,15 @@
+services:
+  nenia:
+    build: .
+    restart: unless-stopped
+    init: true
+    environment:
+      NENIA_TOKEN: "${NENIA_TOKEN:?Set NENIA_TOKEN to at least 24 random characters}"
+    ports:
+      - "127.0.0.1:${NENIA_PORT:-7433}:7433"
+    volumes:
+      - nenia-data:/data
+    stop_grace_period: 30s
+
+volumes:
+  nenia-data:

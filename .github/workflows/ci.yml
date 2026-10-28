@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: Native tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+          components: rustfmt, clippy
+      - name: Formatting
+        if: runner.os == 'Linux'
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        if: runner.os == 'Linux'
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Tests including real CLI and HTTP server
+        run: cargo test --locked --all-targets
+      - name: Build release binary
+        run: cargo build --locked --release --bin nenia
+      - name: Package binary
+        shell: bash
+        run: |
+          mkdir -p dist
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            cp target/release/nenia.exe dist/
+          else
+            cp target/release/nenia dist/
+          fi
+          cp LICENSE README.md dist/
+          tar -czf "nenia-${{ runner.os }}-${{ runner.arch }}.tar.gz" -C dist .
+      - uses: actions/upload-artifact@v7
+        with:
+          name: nenia-${{ runner.os }}-${{ runner.arch }}
+          path: nenia-${{ runner.os }}-${{ runner.arch }}.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  container:
+    name: Build and start container
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker build --tag nenia:ci .
+      - name: Start and probe local server
+        shell: bash
+        run: |
+          docker run --detach --name nenia-ci \
+            --publish 127.0.0.1:7433:7433 \
+            --env NENIA_TOKEN=synthetic-ci-local-token-0123456789 nenia:ci
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:7433/healthz; then
+              curl --fail --silent \
+                --header 'Authorization: Bearer synthetic-ci-local-token-0123456789' \
+                http://127.0.0.1:7433/v1/snapshots
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs nenia-ci
+          exit 1
+      - name: Clean up
+        if: always()
+        run: docker rm --force --volumes nenia-ci || true

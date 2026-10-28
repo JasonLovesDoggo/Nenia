@@ -636,11 +636,27 @@ async fn run(args: &Args) -> Result<()> {
         args.report.join("corpus-aggregate.json"),
         serde_json::to_vec_pretty(&aggregate(&corpus))?,
     )?;
+    let source_hashes = [
+        "Cargo.toml",
+        "Cargo.lock",
+        "src/pack.rs",
+        "src/vault.rs",
+        "src/adapters.rs",
+        "src/remote.rs",
+        "examples/real_benchmark.rs",
+    ]
+    .map(|name| Ok((name, file_hash(Path::new(name))?)))
+    .into_iter()
+    .collect::<Result<Vec<_>>>()?;
+    let mut environment = json!({"source_code_blake3":source_hashes,"executable_blake3":file_hash(&std::env::current_exe()?)?});
+    let metadata = json!({"started_at":Utc::now().to_rfc3339(),"source_commit":output("git",&["rev-parse","HEAD"]),"rustc":output("rustc",&["-Vv"]),"zstd_version":zstd::zstd_safe::version_string(),"os":std::env::consts::OS,"arch":std::env::consts::ARCH,"logical_cpus":std::thread::available_parallelism().ok().map(|x|x.get()),"level":args.level,"window_log":23,"trials":args.trials,"private_trace_details_in_report":false,"state":"fresh archives, frozen actual files, warm source cache; no cold-storage claim","limitations":["shared development host, power/thermal state uncontrolled","file lengths, not filesystem allocated blocks or cloud billing","short batch throughput, not sustained service capacity","baseline recovery mapping published at final completion, Nenia per ingestion transaction","all source mappings, filenames, content hashes, credentials and objects remain outside the repository"]});
+    environment
+        .as_object_mut()
+        .unwrap()
+        .extend(metadata.as_object().unwrap().clone());
     fs::write(
         args.report.join("environment.json"),
-        serde_json::to_vec_pretty(
-            &json!({"started_at":Utc::now().to_rfc3339(),"source_commit":output("git",&["rev-parse","HEAD"]),"rustc":output("rustc",&["-Vv"]),"zstd_version":zstd::zstd_safe::version_string(),"os":std::env::consts::OS,"arch":std::env::consts::ARCH,"logical_cpus":std::thread::available_parallelism().ok().map(|x|x.get()),"level":args.level,"window_log":23,"trials":args.trials,"private_trace_details_in_report":false,"state":"fresh archives, frozen actual files, warm source cache; no cold-storage claim","limitations":["shared development host, power/thermal state uncontrolled","file lengths, not filesystem allocated blocks or cloud billing","short batch throughput, not sustained service capacity","baseline recovery mapping published at final completion, Nenia per ingestion transaction","all source mappings, filenames, content hashes, credentials and objects remain outside the repository"]}),
-        )?,
+        serde_json::to_vec_pretty(&environment)?,
     )?;
     let mut raw = OpenOptions::new()
         .write(true)

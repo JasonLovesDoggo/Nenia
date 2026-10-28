@@ -1,10 +1,15 @@
-# Running Nenia continuously
+# Running Nenia
 
 Run the client under the same OS account as your agents. After `nenia connect`,
-`nenia watch --interval 60` discovers and captures local traces every minute and
-retries uploads while offline. Each cycle releases the vault lock before it
-sleeps. `nenia watch --once` performs one cycle and returns a nonzero status when
-the remote upload has not completed, which is useful with an existing scheduler.
+use `nenia hooks install claude` for event-driven Claude Code capture. Hooks
+queue completed turns and sessions; a detached worker archives and uploads them.
+There is no polling daemon. See [hook setup and offline retry](hooks.md).
+
+For other agents, `nenia run -- codex` captures after the command exits.
+`nenia backup` imports existing sessions. Optional `nenia watch --interval 60`
+scans providers without hook support, releasing the vault lock between cycles.
+`nenia watch --once` performs one cycle and reports an incomplete upload with a
+nonzero exit status, for use with an existing scheduler.
 
 By default rescans use size and modification time to avoid rereading unchanged
 traces. Use `nenia backup --full-scan` periodically if another tool might rewrite
@@ -52,7 +57,7 @@ The CLI and server use the same exclusive vault lock. Save `packs/` and
 `config.json` locally to retain the server settings. The search catalog can be
 rebuilt from the archive objects.
 
-## Example Linux user service
+## Optional polling service on Linux
 
 If installed with `cargo install --path .`, save this as
 `~/.config/systemd/user/nenia.service`:
@@ -77,7 +82,7 @@ manager is active. If you already override provider homes in your shell, add
 those same environment variables to the service. The default provider locations
 need no additional configuration.
 
-## macOS and Windows scheduling
+## Optional scheduling on macOS and Windows
 
 On macOS, a user LaunchAgent can run the absolute path to `nenia` with the
 arguments `watch --interval 60`, with `RunAtLoad` and `KeepAlive` enabled. Run it

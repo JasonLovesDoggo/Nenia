@@ -76,6 +76,12 @@ Solid Zstd may require reading the whole stream to reach one snapshot. These are
 storage-layout comparisons with equivalent byte preservation, not identical
 products or identical random-access costs.
 
+The solid baseline acknowledges durability only after the entire history has been
+compressed. Nenia durably publishes each ingestion round, and the per-file baseline
+publishes each object. Solid timing therefore does not measure equivalent
+incremental-backup acknowledgment latency and cannot establish superior online
+backup throughput.
+
 ## Reproduce
 
 From the repository root, with Rust available on `PATH`:
@@ -102,4 +108,15 @@ throughput, including bytes deduplicated away, not physical disk write throughpu
 
 ## Collected evidence
 
-Collection is pending the correctness smoke run and the three full trials.
+The [smoke run](benchmark-results/2026-10-27-smoke/summary.json) restored all 204
+snapshots across 12 candidate batches with zero errors. Its temporary archives
+lived on tmpfs; it is correctness evidence only.
+
+The [initial full run](benchmark-results/2026-10-27-full/samples.jsonl) restored all
+612 snapshots across 36 batches with zero errors. Treat that run as exploratory:
+the shared source tree was being edited during compilation, so its recorded source
+hashes may differ from the compiled executable. All original rows and the executable
+hash are retained. It motivated a bounded streaming index reader, a two-pack read
+cache, and exclusion of arbitrary binary bytes from search. No compression or
+chunking parameters changed. Final collection against a stable source checkpoint
+is pending.

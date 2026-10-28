@@ -181,5 +181,9 @@ cargo clippy --all-targets --locked -- -D warnings
 cargo fmt --check
 ```
 
+The [validation record](docs/validation.md) lists exact checks and evidence boundaries.
+Open [the interactive storage report](docs/results.html) to compare archive, catalog,
+and optional index sizes.
+
 See [design checkpoints](docs/principles.md) for the decisions reconsidered during
 implementation. MIT licensed.

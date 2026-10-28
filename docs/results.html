@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nenia · measured storage</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:transparent;color:var(--foreground,#17212b);font:14px/1.5 var(--font-sans,system-ui,sans-serif)}h2{font-size:21px;font-weight:650;letter-spacing:-.4px;margin:0 0 5px}p{margin:0 0 16px}.muted,small{color:var(--muted-foreground,#596778)}.pipeline{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:20px 0 24px}.step{padding:16px;border-radius:var(--radius,10px);background:var(--secondary,#f0f3f7)}.step b{display:block;font-size:14px;margin:5px 0}.eyebrow{font:11px var(--font-mono,monospace);letter-spacing:.8px;color:var(--muted-foreground,#596778)}.step small{display:block;font-size:12px}.tabs{display:flex;gap:5px;flex-wrap:wrap;margin:14px 0}button{border:1px solid var(--border,#d6dce3);border-radius:6px;background:transparent;color:inherit;padding:7px 10px;font:inherit;font-size:12px;cursor:pointer}button[aria-pressed=true]{background:var(--accent-surface,#e5f5f0);border-color:var(--accent,#1b8777);color:var(--accent-surface-foreground,#126e60)}.legend{display:flex;gap:17px;flex-wrap:wrap;font-size:12px;margin:14px 0}.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}.case{padding:13px 0;border-top:1px solid var(--border,#d6dce3)}.casehead{display:flex;justify-content:space-between;gap:12px;margin-bottom:8px;font-size:13px}.casehead span{font-size:11px;color:var(--muted-foreground,#596778)}.barrow{display:grid;grid-template-columns:1fr 72px;align-items:center;gap:10px;margin:4px 0;height:12px}.track{height:8px}.bar{height:100%;border-radius:2px;transition:width .18s ease}.value{font:11px var(--font-mono,monospace);text-align:right}.note{font-size:12px;margin-top:13px}.proof{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0 0;padding-top:13px;border-top:1px solid var(--border,#d6dce3);font-size:11px}.proof b{font-weight:650}.perfile{background:#94a3b8}.solid{background:#789bd1}.nenia{background:#25a58e}@media(max-width:500px){.pipeline{grid-template-columns:1fr}.step{padding:16px}.step b{display:inline;margin-left:8px}.step small{margin-top:4px}.casehead{flex-direction:column;gap:1px}h2{font-size:19px}}
+</style>
+<h2>A small backup service, with recoverable archives</h2>
+<p class="muted">One Rust binary. Automatic session discovery. Offline capture and retry.</p>
+<div class="pipeline">
+ <div class="step"><span class="eyebrow">01 · DEVICES</span><b>Capture</b><small>Codex, Claude Code, Pi<br>Generic and Plaud exports</small></div>
+ <div class="step"><span class="eyebrow">02 · YOUR SERVER</span><b>Archive</b><small>Deduplicated Zstd packs<br>Rebuildable SQLite catalog</small></div>
+ <div class="step"><span class="eyebrow">03 · OPTIONAL</span><b>Mirror</b><small>S3-compatible object storage<br>Asynchronous off-site copy</small></div>
+</div>
+<h2>Storage, including the tradeoffs</h2>
+<p class="muted">Synthetic workloads · median of three trials · MiB · lower is smaller</p>
+<div class="tabs" role="group" aria-label="Nenia storage accounting">
+ <button data-mode="archive" aria-pressed="true">Object archive</button>
+ <button data-mode="total" aria-pressed="false">+ local catalog</button>
+ <button data-mode="indexed" aria-pressed="false">+ full-text index</button>
+</div>
+<div class="legend"><span><i class="perfile"></i>Per-file Zstd</span><span><i class="solid"></i>Solid Zstd</span><span><i class="nenia"></i>Nenia</span></div>
+<div id="chart" aria-live="polite"></div>
+<p class="note muted" id="note"></p>
+<p class="note muted">All archives include mapping metadata. The baselines do not provide equivalent incremental publication or search. These measurements establish storage behavior on these fixtures, not a universal compression or speed advantage.</p>
+<div class="proof"><span><b>73</b> automated tests passed</span><span><b>612</b> exact benchmark restores</span><span><b>S3</b> emulator validated</span></div>
+<script>
+const rows=[
+ {name:'Independent traces',detail:'Little repeated history',perfile:1812980,solid:1903515,archive:1918825,total:2009034,indexed:4446154},
+ {name:'Append history',detail:'Retained versions of growing sessions',perfile:6671622,solid:1672888,archive:1938445,total:2065518,indexed:8979566},
+ {name:'Shared-prefix forks',detail:'Related sessions reuse prior context',perfile:3439658,solid:959139,archive:960990,total:1038911,indexed:4250175},
+ {name:'Random binary',detail:'Incompressible negative control',perfile:8389159,solid:8389116,archive:8397123,total:8479140,indexed:8479140}
+];
+function render(mode){
+ const max=Math.max(...rows.flatMap(r=>[r.perfile,r.solid,r[mode]]))*1.04;
+ document.getElementById('chart').innerHTML=rows.map(r=>`<div class="case"><div class="casehead"><b>${r.name}</b><span>${r.detail}</span></div>${[['perfile','Per-file Zstd'],['solid','Solid Zstd'],[mode,'Nenia']].map(([k,label],i)=>`<div class="barrow" aria-label="${label}: ${(r[k]/1048576).toFixed(2)} MiB"><div class="track"><div class="bar ${i===2?'nenia':k}" style="width:${r[k]/max*100}%"></div></div><div class="value">${(r[k]/1048576).toFixed(2)}</div></div>`).join('')}</div>`).join('');
+ document.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===mode)));
+ document.getElementById('note').textContent={archive:'Nenia uses 70.9% less space for append history and 72.1% less for forks than per-file Zstd. Independent traces are 5.8% larger; solid Zstd remains a strong baseline.',total:'This adds the local catalog, configuration, and other local files to Nenia. Remote object storage contains only packs and manifests.',indexed:'The optional search index can outweigh compressed payloads. It is disabled by default; binary content adds no text-index growth in this control.'}[mode];
+}
+document.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>render(b.dataset.mode)));render('archive');
+console.log('Four workloads; three accounting modes; all chart values trace to the final benchmark medians.');
+</script>
+</html>

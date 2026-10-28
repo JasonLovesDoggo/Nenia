@@ -4,3 +4,34 @@
 /dist/
 *.tmp
 
+# Local credentials and provider state, never publication inputs.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+/.codex/
+/.claude/
+/.pi/
+
+# Local vaults and their immutable payloads can contain complete private sessions.
+/spool/
+/vault/
+/vaults/
+/backups/
+catalog.sqlite3*
+vault.lock
+*.nz
+*.json.zst
+
+# Keep actual trace corpora and private benchmark output outside the repository.
+/private/
+/private-traces/
+/private-bench*/
+/real-traces/
+/real-sessions/
+/real-bench-output/
+/raw-traces/
+/traces/
+/sessions/
+

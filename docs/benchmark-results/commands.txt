@@ -1,0 +1,15 @@
+Initial correctness and exploratory collection, run from the repository root:
+
+/home/json/.cargo/bin/cargo build --release --example benchmark
+PATH=/home/json/.cargo/bin:$PATH target/release/examples/benchmark --output /tmp/nenia-benchmark-smoke-20261027 --trials 1 --scale 0.0625
+PATH=/home/json/.cargo/bin:$PATH target/release/examples/benchmark --output docs/benchmark-results/2026-10-27-full --trials 3
+/home/json/.cargo/bin/cargo clippy --example benchmark -- -D warnings
+
+The smoke artifacts were copied from /tmp/nenia-benchmark-smoke-20261027 into
+2026-10-27-smoke. The smoke archive lived on tmpfs and provides correctness
+coverage only. The full run used the repository ext4 filesystem.
+
+The first full run is exploratory: source files were concurrently edited while
+the release binary was being built. Its executable hash is retained, but runtime
+source hashes may differ from what was compiled. Final results require a stable
+source checkpoint. No successful rows have been removed.

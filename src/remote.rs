@@ -601,6 +601,8 @@ fn check_options(options: &SyncOptions) -> Result<()> {
 
 /// Upload packs, then publish manifests. Never removes or overwrites objects.
 /// The caller must hold the vault's exclusive writer lock throughout this call.
+/// A lock-owning server may publish new immutable source objects concurrently;
+/// a missed dependency fails safely and is included in a later sync.
 pub async fn push(vault: &Path, remote: &str, options: &SyncOptions) -> Result<SyncReport> {
     check_options(options)?;
     let source = local_inventory(vault)?;
@@ -613,7 +615,12 @@ pub async fn push(vault: &Path, remote: &str, options: &SyncOptions) -> Result<S
         .collect();
     let mut report = SyncReport::default();
     for kind in [Kind::Pack, Kind::Manifest] {
-        let results = stream::iter(source.values().filter(|object| object.kind == kind))
+        let objects: Vec<_> = source
+            .values()
+            .filter(|object| object.kind == kind)
+            .cloned()
+            .collect();
+        let results = stream::iter(objects)
             .map(|object| {
                 let remote = &remote;
                 let destination = &destination;
@@ -628,15 +635,15 @@ pub async fn push(vault: &Path, remote: &str, options: &SyncOptions) -> Result<S
                         if !options.verify_existing {
                             return Ok(SyncReport::existing(false));
                         }
-                        let bytes = read_local(vault, object).await?;
-                        check_references(object, &bytes, packs)?;
+                        let bytes = read_local(vault, &object).await?;
+                        check_references(&object, &bytes, packs)?;
                         drop(bytes);
-                        remote.read(object).await?;
+                        remote.read(&object).await?;
                         Ok(SyncReport::existing(true))
                     } else {
-                        let bytes = read_local(vault, object).await?;
-                        check_references(object, &bytes, packs)?;
-                        remote.put(object, bytes).await
+                        let bytes = read_local(vault, &object).await?;
+                        check_references(&object, &bytes, packs)?;
+                        remote.put(&object, bytes).await
                     }
                 }
             })
@@ -664,7 +671,12 @@ pub async fn pull(vault: &Path, remote: &str, options: &SyncOptions) -> Result<S
         .collect();
     let mut report = SyncReport::default();
     for kind in [Kind::Pack, Kind::Manifest] {
-        let results = stream::iter(source.values().filter(|object| object.kind == kind))
+        let objects: Vec<_> = source
+            .values()
+            .filter(|object| object.kind == kind)
+            .cloned()
+            .collect();
+        let results = stream::iter(objects)
             .map(|object| {
                 let remote = &remote;
                 let destination = &destination;
@@ -680,14 +692,14 @@ pub async fn pull(vault: &Path, remote: &str, options: &SyncOptions) -> Result<S
                         // Even the trust option validates manifests and their dependencies.
                         let verified = options.verify_existing || kind == Kind::Manifest;
                         if verified {
-                            let bytes = read_local(vault, object).await?;
-                            check_references(object, &bytes, packs)?;
+                            let bytes = read_local(vault, &object).await?;
+                            check_references(&object, &bytes, packs)?;
                         }
                         Ok(SyncReport::existing(verified))
                     } else {
-                        let bytes = remote.read(object).await?;
-                        check_references(object, &bytes, packs)?;
-                        write_local(vault, object, bytes).await
+                        let bytes = remote.read(&object).await?;
+                        check_references(&object, &bytes, packs)?;
+                        write_local(vault, &object, bytes).await
                     }
                 }
             })

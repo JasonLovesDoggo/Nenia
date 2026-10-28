@@ -1033,6 +1033,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "tower",
  "url",
  "walkdir",
  "windows-sys 0.61.2",

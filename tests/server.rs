@@ -7,11 +7,8 @@ use nenia::{
 use reqwest::{Client, StatusCode};
 use serde_json::Value;
 use std::{collections::BTreeSet, fs, path::Path, time::Duration};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream},
-    task::JoinHandle,
-};
+use tokio::{net::TcpListener, task::JoinHandle};
+use tower::ServiceExt;
 
 const TOKEN: &str = "synthetic-server-test-token-0123456789";
 
@@ -386,7 +383,7 @@ async fn rejected_requests_do_not_publish_objects_and_pack_dependencies_are_requ
 }
 
 #[tokio::test]
-async fn slow_downloads_hold_capacity_until_their_response_bodies_are_dropped() {
+async fn retained_download_bodies_hold_capacity_until_the_last_byte_owner_is_dropped() {
     let directory = tempfile::tempdir().unwrap();
     let mut vault = Vault::init(&directory.path().join("server"), 1).unwrap();
     let mut builder = PackBuilder::new(1);
@@ -406,57 +403,46 @@ async fn slow_downloads_hold_capacity_until_their_response_bodies_are_dropped() 
     vault
         .receive_object("packs", &pack.id, &pack.bytes)
         .unwrap();
-    let server = Server::start(vault, false).await;
-    let request = format!("GET /v1/packs/{} HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {TOKEN}\r\nConnection: close\r\n\r\n", pack.id);
-    let mut slow = Vec::new();
-    for _ in 0..8 {
-        let mut connection = TcpStream::connect(server.address).await.unwrap();
-        connection.write_all(request.as_bytes()).await.unwrap();
-        let mut headers = Vec::new();
-        tokio::time::timeout(Duration::from_secs(10), async {
-            while !headers.ends_with(b"\r\n\r\n") {
-                headers.push(connection.read_u8().await.unwrap());
-                assert!(headers.len() < 8192);
-            }
-        })
-        .await
-        .unwrap();
-        assert!(headers.starts_with(b"HTTP/1.1 200"));
-        slow.push(connection); // Deliberately stop reading the large response.
-    }
-    let route = server.url(&format!("/v1/packs/{}", pack.id));
-    assert_eq!(
-        server
-            .client
-            .get(&route)
-            .bearer_auth(TOKEN)
-            .send()
-            .await
+    let router = server::router(vault, TOKEN.into()).unwrap();
+    let route = format!("/v1/packs/{}", pack.id);
+    let request = || {
+        axum::http::Request::builder()
+            .uri(&route)
+            .header("Authorization", format!("Bearer {TOKEN}"))
+            .body(axum::body::Body::empty())
             .unwrap()
-            .status(),
+    };
+    // Hold bodies before any socket can copy them into its OS-specific buffers.
+    let mut retained = Vec::new();
+    for _ in 0..8 {
+        let response = router.clone().oneshot(request()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        retained.push(response);
+    }
+    assert_eq!(
+        router.clone().oneshot(request()).await.unwrap().status(),
         StatusCode::TOO_MANY_REQUESTS
     );
-    drop(slow);
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
-    loop {
-        let response = server
-            .client
-            .get(&route)
-            .bearer_auth(TOKEN)
-            .send()
+    let bytes = axum::body::to_bytes(retained.pop().unwrap().into_body(), MAX_PACK_ENCODED_SIZE)
+        .await
+        .unwrap();
+    assert_eq!(bytes.as_ref(), pack.bytes);
+    let another_owner = bytes.clone();
+    drop(bytes);
+    assert_eq!(
+        router.clone().oneshot(request()).await.unwrap().status(),
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    drop(another_owner);
+    let response = router.clone().oneshot(request()).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        axum::body::to_bytes(response.into_body(), MAX_PACK_ENCODED_SIZE)
             .await
-            .unwrap();
-        if response.status() == StatusCode::OK {
-            assert_eq!(response.bytes().await.unwrap().as_ref(), pack.bytes);
-            break;
-        }
-        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
-        assert!(
-            tokio::time::Instant::now() < deadline,
-            "download capacity was never released"
-        );
-        tokio::time::sleep(Duration::from_millis(25)).await;
-    }
+            .unwrap()
+            .as_ref(),
+        pack.bytes
+    );
 }
 
 #[cfg(unix)]

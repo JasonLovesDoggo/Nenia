@@ -76,11 +76,12 @@ Solid Zstd may require reading the whole stream to reach one snapshot. These are
 storage-layout comparisons with equivalent byte preservation, not identical
 products or identical random-access costs.
 
-The solid baseline acknowledges durability only after the entire history has been
-compressed. Nenia durably publishes each ingestion round, and the per-file baseline
-publishes each object. Solid timing therefore does not measure equivalent
-incremental-backup acknowledgment latency and cannot establish superior online
-backup throughput.
+Both baselines publish their mapping manifest only after the entire history has
+been compressed. The per-file baseline syncs each payload earlier; the solid
+baseline syncs its payload only at the end. Nenia publishes self-contained manifests
+and commits its catalog each ingestion round. Baseline timing therefore does not
+measure equivalent incremental-backup acknowledgment latency and cannot establish
+superior online backup throughput.
 
 ## Reproduce
 

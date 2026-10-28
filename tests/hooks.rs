@@ -30,7 +30,7 @@ impl Fixture {
             tempfile::tempdir_in(fs::canonicalize(std::env::temp_dir()).unwrap()).unwrap();
         let root = directory.path().to_path_buf();
         let home = root.join("home");
-        let vault = root.join("vault");
+        let vault = root.join("vault with spaces & $literal");
         let remote = root.join("remote");
         fs::create_dir(&home).unwrap();
         let mut opened = Vault::init(&vault, 1).unwrap();

@@ -604,7 +604,7 @@ impl Vault {
             } else {
                 source_override
             };
-            let metadata = adapters::inspect(
+            let metadata = adapters::inspect_source(
                 BufReader::new(file.try_clone()?.take(initial.len())),
                 source,
                 &path,
@@ -929,7 +929,7 @@ impl Vault {
                 hash: blake3::Hasher::new(),
                 expected: &m.content_hash,
             };
-            let mut text = adapters::index_text(BufReader::new(reader), max_bytes)?;
+            let mut text = adapters::index_source(reader, max_bytes, Path::new(&m.origin))?;
             text.push_str(&format!(
                 " {} {} {}",
                 m.origin,

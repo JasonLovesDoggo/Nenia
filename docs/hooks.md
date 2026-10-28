@@ -97,8 +97,9 @@ Use a Claude version that supports exec-form `args` and `onFailure`; older
 versions may need upgrading. Tests use synthetic official-shaped payloads and
 real Nenia processes, covering setting preservation, idempotence, path characters,
 detachment, busy-vault handoff, offline recovery, and exact remote restoration.
-Linux execution is verified; native Windows/macOS hook lifecycle execution remains
-for their CI/device environments. The handlers cover the main transcript supplied
+Native Linux, macOS, and Windows callback/worker tests pass in
+[GitHub Actions](https://github.com/JasonLovesDoggo/Nenia/actions/runs/40778337469). Windows workers explicitly disable handle inheritance
+so they cannot keep the callback's pipes open. The handlers cover the main transcript supplied
 by Stop and SessionEnd; separate subagent transcript files are not automatically
 included by these two hooks.
 

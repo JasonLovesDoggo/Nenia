@@ -99,11 +99,9 @@ that account's home instead of your agent sessions.
 
 ## Validation status
 
-Linux tests run real CLI processes against a local HTTP server, including
-offline retries, fresh-device recovery, corrupt-catalog recovery, source
-reversions, and wrapper exit status. Adapter code and tests also cross-check
-for Windows MSVC and macOS ARM64. The GitHub Actions workflow adds native tests
-on all three OSes, packaged build artifacts, and a container startup probe; it
-does not publish releases or images. Docker and those hosted CI jobs were not
-available to execute in the development environment, so they are provided as
-unrun deployment checks rather than claimed validation.
+Native Linux, macOS, and Windows tests and release builds, plus the Docker build
+and server startup probe, passed in [GitHub Actions](https://github.com/JasonLovesDoggo/Nenia/actions/runs/40778337469).
+The workflow produces native binary artifacts; it does not publish container
+images or releases. Tests cover offline retries, fresh-device recovery,
+corrupt-catalog recovery, source reversions, event hooks, and wrapper exit status.
+Actual AWS/R2 accounts and WAN performance remain separate from these checks.

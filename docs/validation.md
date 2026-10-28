@@ -38,7 +38,10 @@ and setup are documented in [remote storage](remote.md).
 
 ## Evidence boundaries
 
-Native Windows/macOS runtime and Docker checks are configured in GitHub Actions.
+Native Linux, macOS, Windows, release builds, and Docker startup checks passed
+in [GitHub Actions](https://github.com/JasonLovesDoggo/Nenia/actions/runs/40778337469) at code commit
+`08d9ad7`. That run includes the Windows detached-process handle fix and
+platform-independent response-body ownership checks.
 Actual AWS/R2 accounts, WAN performance, physical power-loss fault injection, and
 multi-year live workloads have not been exercised locally. The archive is compressed,
 not encrypted by Nenia; use HTTPS and appropriate private storage.

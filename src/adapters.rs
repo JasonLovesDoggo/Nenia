@@ -2,16 +2,20 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fmt;
 use std::fs;
 use std::io::{self, BufRead, BufReader, Cursor, Read};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use walkdir::WalkDir;
 
 /// Maximum JSON document or individual JSONL record parsed for metadata/indexing.
 pub const MAX_RECORD_BYTES: usize = 1024 * 1024;
+/// Metadata/index decoding budget for a compressed source; raw archival has no such cap.
+pub const MAX_SOURCE_DECODE_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_FIELD_BYTES: usize = 4096;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, clap::ValueEnum)]
@@ -57,6 +61,9 @@ pub struct Metadata {
     pub events: u64,
     pub malformed_lines: u64,
     pub skipped_oversized_lines: u64,
+    /// Best-effort source decoding limitations; never a truncation of archived bytes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
 }
 
 /// Find local stores without opening files. Honors the providers' home overrides.
@@ -134,12 +141,23 @@ fn collect(
             .extension()
             .and_then(|s| s.to_str())
             .unwrap_or("");
+        let compressed_kind = entry
+            .path()
+            .file_stem()
+            .and_then(|s| Path::new(s).extension())
+            .and_then(|s| s.to_str())
+            .unwrap_or("");
         let supported = extension.eq_ignore_ascii_case("jsonl")
             || extension.eq_ignore_ascii_case("ndjson")
+            || (extension.eq_ignore_ascii_case("zst")
+                && (compressed_kind.eq_ignore_ascii_case("jsonl")
+                    || compressed_kind.eq_ignore_ascii_case("ndjson")))
             || (!jsonl_only
-                && ["json", "txt", "md"]
-                    .iter()
-                    .any(|e| extension.eq_ignore_ascii_case(e)));
+                && ["json", "txt", "md"].iter().any(|e| {
+                    extension.eq_ignore_ascii_case(e)
+                        || (extension.eq_ignore_ascii_case("zst")
+                            && compressed_kind.eq_ignore_ascii_case(e))
+                }));
         if explicit_file || supported {
             let path = fs::canonicalize(entry.path())?;
             let source = if source == Source::Generic {
@@ -233,6 +251,97 @@ pub fn index_text<R: BufRead>(reader: R, max_bytes: usize) -> io::Result<String>
         text.len() < max_bytes
     })?;
     Ok(text)
+}
+
+/// Recognized textual export containers; this does not change their archived bytes.
+pub fn is_zstd_source(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("zst"))
+        && path
+            .file_stem()
+            .and_then(|stem| Path::new(stem).extension())
+            .is_some_and(|ext| {
+                ["jsonl", "ndjson", "json", "txt", "md"]
+                    .iter()
+                    .any(|suffix| ext.eq_ignore_ascii_case(suffix))
+            })
+}
+
+/// Inspect a plain or native Zstd trace. Invalid compressed contents become warnings;
+/// failures from the underlying reader still propagate, including archive corruption.
+pub fn inspect_source<R: Read>(reader: R, source: Source, path: &Path) -> io::Result<Metadata> {
+    inspect_source_with_limit(reader, source, path, MAX_SOURCE_DECODE_BYTES)
+}
+
+fn inspect_source_with_limit<R: Read>(
+    reader: R,
+    source: Source,
+    path: &Path,
+    limit: u64,
+) -> io::Result<Metadata> {
+    if !is_zstd_source(path) {
+        return inspect(BufReader::new(reader), source, path);
+    }
+    let logical_path = path.with_extension("");
+    let (parsed, warning) = decode_source(reader, limit, |reader| {
+        inspect(reader, source, &logical_path)
+    })?;
+    let mut metadata = match parsed {
+        Some(metadata) => metadata,
+        None => inspect(Cursor::new([]), source, &logical_path)?,
+    };
+    if let Some(warning) = warning {
+        metadata.warnings.push(warning);
+    }
+    Ok(metadata)
+}
+
+/// Search decoded source text while keeping the original compressed container intact.
+/// Invalid source compression yields no body text; metadata records the warning.
+pub fn index_source<R: Read>(reader: R, max_bytes: usize, path: &Path) -> io::Result<String> {
+    if !is_zstd_source(path) {
+        return index_text(BufReader::new(reader), max_bytes);
+    }
+    let (text, _) = decode_source(reader, MAX_SOURCE_DECODE_BYTES, |reader| {
+        index_text(reader, max_bytes)
+    })?;
+    Ok(text.unwrap_or_default())
+}
+
+struct TrackRead<R> {
+    reader: R,
+    failed: Rc<Cell<bool>>,
+}
+impl<R: Read> Read for TrackRead<R> {
+    fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+        let result = self.reader.read(output);
+        self.failed.set(result.is_err());
+        result
+    }
+}
+
+fn decode_source<R: Read, T>(
+    reader: R,
+    limit: u64,
+    parse: impl FnOnce(&mut dyn BufRead) -> io::Result<T>,
+) -> io::Result<(Option<T>, Option<String>)> {
+    let failed = Rc::new(Cell::new(false));
+    let tracked = TrackRead {
+        reader,
+        failed: failed.clone(),
+    };
+    let parsed = (|| -> io::Result<(T, bool)> {
+        let mut decoder = zstd::stream::read::Decoder::new(tracked)?;
+        decoder.window_log_max(26)?; // At most a 64 MiB decompression window.
+        let mut decoded = BufReader::new(decoder.take(limit.saturating_add(1)));
+        let value = parse(&mut decoded)?;
+        Ok((value, decoded.get_ref().limit() == 0))
+    })();
+    match parsed {
+        Ok((value, capped)) => Ok((Some(value), capped.then(|| format!("Zstd source scan limited to {limit} decoded bytes; later content and frame completion were not inspected. Original compressed bytes are preserved.")))),
+        Err(error) if failed.get() => Err(error),
+        Err(error) => Ok((None, Some(format!("Zstd source could not be decoded: {error}. Original compressed bytes are preserved.")))),
+    }
 }
 
 fn plain_text(bytes: &[u8]) -> Option<&str> {
@@ -785,5 +894,156 @@ mod tests {
         }
         let error = inspect(BufReader::new(Broken), Source::Auto, Path::new("x")).unwrap_err();
         assert!(error.to_string().contains("injected read failure"));
+    }
+
+    #[test]
+    fn native_zstd_sources_decode_metadata_and_text_without_rewriting_input() {
+        let raw = concat!(
+            "{\"type\":\"session_meta\",\"payload\":{\"id\":\"compressed-session\",\"cwd\":\"/fiction/project\"}}\n",
+            "{\"type\":\"response_item\",\"payload\":{\"role\":\"user\",\"content\":[{\"text\":\"Compressed copper memory\"}]}}\n"
+        );
+        let encoded = zstd::encode_all(raw.as_bytes(), 3).unwrap();
+        let original = encoded.clone();
+        let path = Path::new("rollout.jsonl.zst");
+        let got = inspect_source(encoded.as_slice(), Source::Auto, path).unwrap();
+        assert_eq!(got.source, Source::Codex);
+        assert_eq!(got.session_id.as_deref(), Some("compressed-session"));
+        assert_eq!(got.title.as_deref(), Some("Compressed copper memory"));
+        assert_eq!(got.events, 2);
+        assert!(got.warnings.is_empty());
+        assert!(index_source(encoded.as_slice(), 1024, path)
+            .unwrap()
+            .contains("copper memory"));
+        assert_eq!(encoded, original);
+    }
+
+    #[test]
+    fn concatenated_zstd_frames_remain_searchable() {
+        let mut encoded =
+            zstd::encode_all(b"{\"session_id\":\"multi-frame\"}\n".as_slice(), 1).unwrap();
+        encoded.extend(
+            zstd::encode_all(b"{\"text\":\"later frame content\"}\n".as_slice(), 1).unwrap(),
+        );
+        let path = Path::new("session.jsonl.zst");
+        let got = inspect_source(encoded.as_slice(), Source::Generic, path).unwrap();
+        assert_eq!(got.events, 2);
+        assert!(got.warnings.is_empty());
+        assert!(index_source(encoded.as_slice(), 1024, path)
+            .unwrap()
+            .contains("later frame"));
+    }
+
+    #[test]
+    fn malformed_or_truncated_zstd_is_opaque_and_warned_about() {
+        let mut truncated = zstd::encode_all(
+            b"{\"text\":\"a truncated compressed trace\"}\n".as_slice(),
+            3,
+        )
+        .unwrap();
+        truncated.truncate(truncated.len() - 3);
+        for bytes in [b"not zstd at all".as_slice(), truncated.as_slice()] {
+            let got = inspect_source(bytes, Source::Codex, Path::new("rollout.jsonl.zst")).unwrap();
+            assert_eq!(got.source, Source::Codex);
+            assert_eq!(got.title.as_deref(), Some("rollout"));
+            assert_eq!(got.warnings.len(), 1);
+            assert!(got.warnings[0].contains("could not be decoded"));
+            assert_eq!(
+                index_source(bytes, 1024, Path::new("rollout.jsonl.zst")).unwrap(),
+                ""
+            );
+        }
+    }
+
+    #[test]
+    fn compressed_scan_budget_preserves_prefix_metadata_and_warns() {
+        let prefix = b"{\"session_id\":\"bounded-session\"}\n";
+        let mut raw = prefix.to_vec();
+        raw.extend(std::iter::repeat_n(b'x', 8192));
+        let encoded = zstd::encode_all(raw.as_slice(), 1).unwrap();
+        let got = inspect_source_with_limit(
+            encoded.as_slice(),
+            Source::Generic,
+            Path::new("trace.jsonl.zst"),
+            128,
+        )
+        .unwrap();
+        assert_eq!(got.session_id.as_deref(), Some("bounded-session"));
+        assert_eq!(got.warnings.len(), 1);
+        assert!(got.warnings[0].contains("128 decoded bytes"));
+        let exact = zstd::encode_all(prefix.as_slice(), 1).unwrap();
+        assert!(inspect_source_with_limit(
+            exact.as_slice(),
+            Source::Generic,
+            Path::new("trace.jsonl.zst"),
+            prefix.len() as u64
+        )
+        .unwrap()
+        .warnings
+        .is_empty());
+    }
+
+    #[test]
+    fn underlying_io_errors_are_not_misclassified_as_source_compression_errors() {
+        struct FailsAfter {
+            bytes: Cursor<Vec<u8>>,
+        }
+        impl Read for FailsAfter {
+            fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+                let read = self.bytes.read(output)?;
+                if read == 0 {
+                    Err(io::Error::other("injected underlying archive corruption"))
+                } else {
+                    Ok(read)
+                }
+            }
+        }
+        let encoded =
+            zstd::encode_all(b"{\"text\":\"valid compressed payload\"}\n".as_slice(), 1).unwrap();
+        let path = Path::new("source.jsonl.zst");
+        let error = inspect_source(
+            FailsAfter {
+                bytes: Cursor::new(encoded.clone()),
+            },
+            Source::Auto,
+            path,
+        )
+        .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("injected underlying archive corruption"));
+        assert!(index_source(
+            FailsAfter {
+                bytes: Cursor::new(encoded)
+            },
+            1024,
+            path
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn discovery_includes_native_compressed_traces_and_explicit_compressed_exports() {
+        let dir = temporary_directory();
+        for name in [
+            ".codex/archived_sessions/native.jsonl.zst",
+            ".codex/sessions/UPPER.JSONL.ZST",
+            ".claude/projects/p/session.ndjson.zst",
+            "export.json.zst",
+            "notes.md.zst",
+            "opaque.zst",
+        ] {
+            let path = dir.path().join(name);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, b"discovery does not inspect payloads").unwrap();
+        }
+        assert_eq!(discover_with(dir.path(), |_| None).unwrap().len(), 3);
+        assert_eq!(discover_paths(&[dir.path().into()]).unwrap().len(), 5);
+        assert!(is_zstd_source(Path::new("native.JSONL.ZST")));
+        assert!(!is_zstd_source(Path::new("opaque.zst")));
+        assert!(!is_zstd_source(Path::new("archive.jsonl")));
+        assert!(serde_json::from_str::<Metadata>("{\"source\":\"codex\"}")
+            .unwrap()
+            .warnings
+            .is_empty());
     }
 }

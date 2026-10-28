@@ -19,9 +19,12 @@ tempfile = "3"
 walkdir = "2"
 zstd = "0.13"
 object_store = { version = "0.12", features = ["aws"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time", "net", "sync"] }
 futures = "0.3"
 url = "2"
+axum = "0.8"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
+getrandom = "0.3"
 
 [profile.release]
 lto = "thin"

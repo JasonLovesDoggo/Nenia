@@ -696,7 +696,10 @@ fn actual_growth(retained: &Retained, files: &[&Frozen]) -> Result<Value> {
             continue;
         }
         let mut prefix = blake3::Hasher::new();
-        io::copy(&mut original.by_ref().take(file.bytes), &mut prefix)?;
+        io::copy(
+            &mut Read::by_ref(&mut original).take(file.bytes),
+            &mut prefix,
+        )?;
         if prefix.finalize().to_hex().as_str() != file.hash {
             rewritten += 1;
             continue;

@@ -1,0 +1,18 @@
+{
+  "mac_decoded/nenia": {
+    "archive_bytes_max": 333653111,
+    "archive_bytes_min": 333653111,
+    "errors": 0,
+    "exact_restores": 268,
+    "files": 268,
+    "input_bytes": 1377078046,
+    "seconds_min_median_max": [
+      11.663335143,
+      11.663335143,
+      11.663335143
+    ],
+    "total_bytes_max": 336753880,
+    "total_bytes_min": 336753880,
+    "trials": 1
+  }
+}

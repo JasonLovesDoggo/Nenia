@@ -1,0 +1,18 @@
+{
+  "combined/nenia": {
+    "archive_bytes_max": 492250908,
+    "archive_bytes_min": 492250908,
+    "errors": 0,
+    "exact_restores": 342,
+    "files": 342,
+    "input_bytes": 774000764,
+    "seconds_min_median_max": [
+      35.732681664,
+      35.732681664,
+      35.732681664
+    ],
+    "total_bytes_max": 494606206,
+    "total_bytes_min": 494606206,
+    "trials": 1
+  }
+}

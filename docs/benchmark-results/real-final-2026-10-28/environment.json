@@ -1,0 +1,62 @@
+{
+  "arch": "x86_64",
+  "chunk_average_bytes": 32768,
+  "chunk_max_bytes": 262144,
+  "chunk_min_bytes": 8192,
+  "container": "all",
+  "executable_blake3": "31c0882eb7f6de02a4b382ec3397999b58d693c11137c9df63679e968eb4feac",
+  "index_enabled": true,
+  "level": 9,
+  "limitations": [
+    "shared development host, power/thermal state uncontrolled",
+    "file lengths, not filesystem allocated blocks or cloud billing",
+    "short batch throughput, not sustained service capacity",
+    "baseline recovery mapping published at final completion, Nenia per ingestion transaction",
+    "all source mappings, filenames, content hashes, credentials and objects remain outside the repository"
+  ],
+  "logical_cpus": 12,
+  "observed_growth_enabled": true,
+  "only_candidate": null,
+  "only_cohort": "combined",
+  "os": "linux",
+  "pack_raw_max_bytes": 8388608,
+  "private_trace_details_in_report": false,
+  "recovery_enabled": true,
+  "rustc": "rustc 1.88.0 (6b00bc388 2025-06-23)\nbinary: rustc\ncommit-hash: 6b00bc3880198600130e1cf62b8f8a93494488cc\ncommit-date: 2025-06-23\nhost: x86_64-unknown-linux-gnu\nrelease: 1.88.0\nLLVM version: 20.1.5",
+  "source_code_blake3": [
+    [
+      "Cargo.toml",
+      "2a9c1a4719e208592e97b83c80a7dfae75d27bcb0d2514de3787a98c5f97082f"
+    ],
+    [
+      "Cargo.lock",
+      "9321f01f9ecd461834664784bf2b51b58586b54c1e851b4d12ab680ee1808c2d"
+    ],
+    [
+      "src/pack.rs",
+      "93416697fe9c9f0bf5b07b27e1ff0b6fa377bf1cbfb9e9d587c081762938d0b2"
+    ],
+    [
+      "src/vault.rs",
+      "1c4792aedb6bee7a2ca1bd5ad21ce9e937820d4a937380b002ca7d7abf8f6f39"
+    ],
+    [
+      "src/adapters.rs",
+      "728b76eb818ed8a7cc79e45fcb782c5cdf950db648c9f9eceb1a980d1c44ac04"
+    ],
+    [
+      "src/remote.rs",
+      "20a2572e6127182af40b3b148810f87ba0123b3e6bb1204a1a6bfd1f85ab9846"
+    ],
+    [
+      "examples/real_benchmark.rs",
+      "9a7b5f01829ef9ae8e0dfc0d34161e60b347c59740891cae16477140c2ca3918"
+    ]
+  ],
+  "source_commit": "c5ab6c6afb2717e9505b9e1a346202d15e5c351a",
+  "started_at": "2026-10-28T21:19:18.733851459+00:00",
+  "state": "fresh archives, frozen actual files, warm source cache; no cold-storage claim",
+  "trials": 3,
+  "window_log": 23,
+  "zstd_version": "1.5.7"
+}

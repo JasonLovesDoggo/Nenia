@@ -50,6 +50,10 @@ verifying the whole reconstructed snapshot before accepting its manifest.
 
 ## Performance boundaries
 
+Raw traces use 32 KiB average content-defined chunks; sealed Zstd traces use
+fixed 256 KiB chunks. The choice comes from [actual format measurements](format-analysis.md).
+The source containers remain byte-for-byte recoverable.
+
 The client keeps a full compressed offline spool. Deduplication is chunk-level
 within that spool; server deduplication is by complete encoded object. This avoids
 a remote round-trip for every chunk and avoids a distributed mutable index.

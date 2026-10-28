@@ -101,3 +101,8 @@ Linux execution is verified; native Windows/macOS hook lifecycle execution remai
 for their CI/device environments. The handlers cover the main transcript supplied
 by Stop and SessionEnd; separate subagent transcript files are not automatically
 included by these two hooks.
+
+The final local callback check also used an existing private 2,166,911-byte Claude
+transcript, returned in about 10 ms, and restored the exact original bytes through
+the detached worker. Only [aggregate evidence](benchmark-results/real-hook-2026-10-28.json)
+is published; no model request or trace upload to a public service was made.

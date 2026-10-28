@@ -1,10 +1,10 @@
-# Validation record
+# Validation
 
-Core source: `0028c05`; complete server test suite: `046dc23`. Subsequent report
-and packaging commits do not change the implementation. Validation ran on Linux
-with Rust 1.88.0 in this workspace on 2026-10-28 UTC.
+Linux validation uses the actual Framework sessions and the complete copied Mac
+snapshot. The core optimization is commit `f625fef`; the final real-data harness
+is `c5ab6c6`. Source files remain private and unchanged.
 
-## Completed
+## Completed locally
 
 ```sh
 cargo test --all-targets --locked
@@ -13,44 +13,36 @@ cargo fmt --all -- --check
 cargo build --release --locked --bin nenia
 ```
 
-All 73 automatic tests passed: 24 unit tests, 11 CLI, 7 reliability, 20 remote,
-6 server, and 5 vault tests. The separately gated S3 test is ignored in that command.
-Clippy and formatting checks passed; the release binary built and its help was
-exercised. The tests use synthetic fixtures and temporary stores, not private
-agent sessions.
+All 92 automatic tests pass: 31 unit, 11 CLI, 2 compressed-source, 10 hook,
+7 reliability, 20 remote, 6 server, and 5 vault tests. Tests cover corruption,
+recovery, concurrent hook handoff, offline retries, source reversions, paged
+inventories, authentication, bounded downloads, and exact native-container restore.
+Unit fixtures exercise edge cases; performance claims use actual sessions only.
 
-The real HTTP flows cover automatic discovery, offline retry after source deletion,
-saved credentials, fresh-device pull and exact restore, two-device isolation,
-reversions, size/mtime/full-scan behavior, missing objects, corruption, SQLite loss
-and corruption, overwrite protection, index rebuilds, consistent inventory pages,
-server indexing, bounded slow downloads, and Ctrl-C/child exit handling.
+The final real-data run archived 342 files / 774,000,764 native bytes, completed
+3,078 byte-exact measured restores, and separately restored all 342 files through
+HTTP and again after deleting SQLite. Eight genuinely grown source files were
+also captured; their new versions and every original version restored exactly.
+See [measurements and retained evidence](benchmarks.md).
 
-The final S3 protocol test ran separately at `046dc23`:
+The locally installed Claude hook was invoked with an existing private transcript.
+The callback returned in about 10 ms, its detached worker captured the file, and
+restoration matched all 2,166,911 original bytes. The event envelope was invoked
+directly; no model request was made. Existing Claude settings were backed up and
+unrelated settings preserved. With no remote configured, the capture stays offline.
 
-```sh
-cargo test --test remote s3_emulator -- --ignored
-```
+An isolated Moto 5.2.5 S3 protocol test previously passed concurrent duplicate
+uploads, idempotency, exact download, corrupt object rejection, and missing pack
+rejection. The emulator was stopped. No cloud resources were created. Its command
+and setup are documented in [remote storage](remote.md).
 
-Moto 5.2.5 served an isolated localhost endpoint with fake credentials, a disposable
-bucket, and a unique prefix. Result: 1 passed, 0 failed in 0.21 seconds. It covered
-concurrent duplicate uploads, idempotency, exact download, corrupt object rejection,
-and missing dependency rejection. The emulator was stopped. No cloud resources
-were created. Reproduction instructions are in [remote.md](remote.md).
+## Evidence boundaries
 
-The [final benchmark](benchmarks.md) performed 36 measured batches and 612 exact
-snapshot reconstructions with zero failures. It retains raw measurements,
-environment details, generator seeds, source hashes, and comparison limitations.
+Native Windows/macOS runtime and Docker checks are configured in GitHub Actions.
+Actual AWS/R2 accounts, WAN performance, physical power-loss fault injection, and
+multi-year live workloads have not been exercised locally. The archive is compressed,
+not encrypted by Nenia; use HTTPS and appropriate private storage.
 
-## Not established here
-
-- Native Windows/macOS runtime execution. Adapter code cross-checks passed, and
-  hosted CI is configured to run the full suite natively on all three platforms.
-- Docker runtime and hosted GitHub Actions. Container configuration was reviewed,
-  YAML parsed, official base tags verified, and a CI startup probe provided.
-- Actual AWS/R2 service behavior, real WAN performance, or provider billing.
-- Physical power-loss fault injection, filesystem snapshot consistency during
-  arbitrary in-place writes, multi-year live workloads, or general backup-tool
-  production maturity.
-
-These boundaries are kept separate from the successful local tests. The release
-is a working v0.1 with a documented format and recovery path.
+The public repository includes code, deterministic edge-case tests, aggregate
+measurements, and documentation. It does not contain private traces, source
+mappings, session identifiers, original data hashes, archive objects, or credentials.

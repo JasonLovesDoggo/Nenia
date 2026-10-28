@@ -1,0 +1,62 @@
+{
+  "arch": "x86_64",
+  "chunk_average_bytes": 32768,
+  "chunk_max_bytes": 262144,
+  "chunk_min_bytes": 8192,
+  "container": "all",
+  "executable_blake3": "628059b5de99eb43011a2ff8c07a1d10b63bb953adf79e641c93925371d10183",
+  "index_enabled": false,
+  "level": 9,
+  "limitations": [
+    "shared development host, power/thermal state uncontrolled",
+    "file lengths, not filesystem allocated blocks or cloud billing",
+    "short batch throughput, not sustained service capacity",
+    "baseline recovery mapping published at final completion, Nenia per ingestion transaction",
+    "all source mappings, filenames, content hashes, credentials and objects remain outside the repository"
+  ],
+  "logical_cpus": 12,
+  "observed_growth_enabled": false,
+  "only_candidate": "nenia",
+  "only_cohort": "combined",
+  "os": "linux",
+  "pack_raw_max_bytes": 8388608,
+  "private_trace_details_in_report": false,
+  "recovery_enabled": false,
+  "rustc": null,
+  "source_code_blake3": [
+    [
+      "Cargo.toml",
+      "2a9c1a4719e208592e97b83c80a7dfae75d27bcb0d2514de3787a98c5f97082f"
+    ],
+    [
+      "Cargo.lock",
+      "9321f01f9ecd461834664784bf2b51b58586b54c1e851b4d12ab680ee1808c2d"
+    ],
+    [
+      "src/pack.rs",
+      "2f0e2f2c03c4b72f754bd41cbf6b034f76925a5cd1b1ab77a6b8969c543a128a"
+    ],
+    [
+      "src/vault.rs",
+      "4df36a83c86f35e27ac693f400a4c3437157b398ad3d484e885eaa9b75c6399b"
+    ],
+    [
+      "src/adapters.rs",
+      "728b76eb818ed8a7cc79e45fcb782c5cdf950db648c9f9eceb1a980d1c44ac04"
+    ],
+    [
+      "src/remote.rs",
+      "20a2572e6127182af40b3b148810f87ba0123b3e6bb1204a1a6bfd1f85ab9846"
+    ],
+    [
+      "examples/real_benchmark.rs",
+      "b165a89803736a457b00bc0e29c6af9aab6161ae5456c6a253a9d7119e615fbe"
+    ]
+  ],
+  "source_commit": null,
+  "started_at": "2026-10-28T21:07:06.404491526+00:00",
+  "state": "fresh archives, frozen actual files, warm source cache; no cold-storage claim",
+  "trials": 1,
+  "window_log": 23,
+  "zstd_version": "1.5.7"
+}

@@ -1,0 +1,36 @@
+{
+  "corpus": "user supplied native Mac Codex snapshot",
+  "measurements": {
+    "files": 268,
+    "native_bytes": 414576373,
+    "zstd_files": 251,
+    "exact_reencoding_matches": 251,
+    "exact_reencoding_native_bytes": 362748802,
+    "decoded_bytes": 1377078046,
+    "records": 225017,
+    "long_string_bytes": 1102380221,
+    "image_data_uri_bytes": 355844470,
+    "raw_files": 17,
+    "unique_long_string_bytes": 787885713,
+    "repeated_long_string_bytes": 314494508
+  },
+  "raw_record_bytes_by_type": {
+    "session_meta": 7980287,
+    "event_msg": 597516881,
+    "response_item": 634008441,
+    "other": 36723335,
+    "turn_context": 7582456,
+    "compacted": 93266646
+  },
+  "encoder_probe": "Zstd CLI 1.5.7, level 3, pledged content size, no checksum, single thread; full SHA-256 and length equality",
+  "elapsed_seconds": 11.693785870913416,
+  "long_string_metric": "Decoded UTF-8 strings >=1024 bytes; duplicate values across all fields, not a predicted archive saving",
+  "private_content_published": false,
+  "frame_headers": {
+    "files": 251,
+    "max_window_bytes": 2097152,
+    "dictionary_frames": 0,
+    "checksum_frames": 0,
+    "over_256mib_decoded": 1
+  }
+}

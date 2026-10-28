@@ -1,0 +1,8 @@
+{
+  "diagnostic_only": true,
+  "files": 268,
+  "decoded_bytes": 1377078046,
+  "solid_zstd9_payload_bytes": 324569606,
+  "seconds_uncontrolled": 9.258099282858893,
+  "comparison": "decoded JSONL stream, not an exact native-container archive"
+}

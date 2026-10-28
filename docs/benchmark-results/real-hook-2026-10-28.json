@@ -1,0 +1,13 @@
+{
+  "provider": "claude",
+  "source": "existing private real transcript",
+  "source_bytes": 2166911,
+  "callback_seconds": 0.009707379154860973,
+  "callback_exit_code": 0,
+  "detached_capture_completed": true,
+  "exact_original_restore": true,
+  "original_untouched": true,
+  "remote_configured": false,
+  "event_envelope": "official Stop input schema invoked directly; no model request made",
+  "private_source_details_published": false
+}

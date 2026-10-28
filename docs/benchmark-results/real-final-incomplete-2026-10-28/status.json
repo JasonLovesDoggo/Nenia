@@ -1,0 +1,10 @@
+{
+  "complete": false,
+  "failed_stage": "observed growth sampling after timed trials and recovery",
+  "reason": "an original live source no longer existed; frozen inputs and all restore checks remained valid",
+  "timed_batches_completed": 9,
+  "timed_exact_restores": 3078,
+  "http_exact_restores": 342,
+  "catalog_recovery_exact_restores": 342,
+  "excluded_samples": 0
+}

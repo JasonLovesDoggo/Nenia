@@ -1,0 +1,50 @@
+{
+  "combined/nenia": {
+    "archive_bytes_max": 494062530,
+    "archive_bytes_min": 494061605,
+    "errors": 0,
+    "exact_restores": 1026,
+    "files": 342,
+    "input_bytes": 774000764,
+    "seconds_min_median_max": [
+      5.615330509,
+      5.648972704,
+      5.7037928
+    ],
+    "total_bytes_max": 496372771,
+    "total_bytes_min": 496355462,
+    "trials": 3
+  },
+  "combined/per_file_zstd": {
+    "archive_bytes_max": 508865307,
+    "archive_bytes_min": 508865307,
+    "errors": 0,
+    "exact_restores": 1026,
+    "files": 342,
+    "input_bytes": 774000764,
+    "seconds_min_median_max": [
+      3.873054256,
+      4.30747134,
+      4.41493877
+    ],
+    "total_bytes_max": 508865307,
+    "total_bytes_min": 508865307,
+    "trials": 3
+  },
+  "combined/solid_zstd": {
+    "archive_bytes_max": 504077858,
+    "archive_bytes_min": 504077858,
+    "errors": 0,
+    "exact_restores": 1026,
+    "files": 342,
+    "input_bytes": 774000764,
+    "seconds_min_median_max": [
+      3.791087694,
+      3.924656765,
+      4.382454194
+    ],
+    "total_bytes_max": 504077858,
+    "total_bytes_min": 504077858,
+    "trials": 3
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "capture": "each source copied through its observed initial length; included frozen inputs retain their original bytes; no invented records or histories",
+  "captured_at": "2026-10-28T21:06:44.072116394+00:00",
+  "empty_files_skipped": 0,
+  "included_frozen_capture_times": [],
+  "private_source_details_published": false,
+  "providers": {
+    "mac_decoded": {
+      "bytes": 1377078046,
+      "files": 268,
+      "max_bytes": 483044758,
+      "median_bytes": 859387.0,
+      "min_bytes": 24028,
+      "p90_bytes": 6347765
+    }
+  },
+  "sources_growing_during_copy": 0
+}

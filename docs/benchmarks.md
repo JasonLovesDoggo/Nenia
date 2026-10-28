@@ -1,108 +1,100 @@
-# Actual trace benchmarks
+# Benchmarks on actual sessions
 
-These measurements use the user's actual trace files. Inputs are frozen outside
-this repository, every measured restore is compared byte-for-byte, and reports
-contain aggregates only. Trace contents, source paths, session identifiers, corpus
-hashes, archive objects, and credentials are not published.
+The final run uses **342 of the user's actual sessions**, including the complete
+Mac snapshot. No generated workloads or public datasets contribute to these results.
+All source content, private paths, session IDs, corpus hashes, and archive objects
+stay outside this repository. Published evidence contains aggregate measurements only.
 
-## Framework corpus
+## Inputs
 
-The frozen capture contains 74 nonempty files: 72 Codex traces and 2 Claude traces,
-359,424,391 bytes in total. The initial inventory contained 72 files; two real Codex
-files appeared before the freeze at 2026-10-28 06:09:47 UTC. No file grew during
-its copy. The frozen inputs were never refreshed between comparisons.
+| Corpus | Files | Native file bytes | Decoded JSONL bytes |
+| --- | ---: | ---: | ---: |
+| Framework: 72 Codex + 2 Claude | 74 | 359,424,391 | 359,424,391 |
+| Mac: 251 compressed + 17 raw Codex | 268 | 414,576,373 | 1,377,078,046 |
+| **Combined** | **342** | **774,000,764** | **1,736,502,437** |
 
-| Provider | Files | Original bytes | Smallest | Median | Largest |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Codex | 72 | 357,091,688 | 49,856 | 1,200,197 | 158,856,579 |
-| Claude | 2 | 2,332,703 | 165,792 | 1,166,351.5 | 2,166,911 |
-| Combined | 74 | 359,424,391 | 49,856 | 1,200,197 | 158,856,579 |
+All 268 Mac files passed the supplied SHA-256 and length checks. The Framework
+files were frozen before comparison; the Mac capture included those frozen copies
+without rereading their changing originals. There were no missing or unlisted Mac
+traces. Native `.jsonl.zst` bytes are preserved exactly, not silently transcoded.
 
-Initial archival storage, in bytes. Values are medians of three independent trials.
-Archives include payloads and recovery manifests; Nenia local totals also include
-SQLite and configuration. No repeated history was invented for this comparison.
+## Final results
 
-| Cohort | Per-file Zstd | Solid Zstd | Nenia archive | Nenia total local |
-| --- | ---: | ---: | ---: | ---: |
-| Claude | 192,837 | 159,639 | 161,124 | 218,565 |
-| Codex | 127,248,844 | 124,317,426 | 113,210,090 | 114,082,635 |
-| Combined | 127,441,588 | 124,473,459 | 113,403,978 | 114,280,619 |
+Median of three fresh trials, with Zstd level 9 throughout. Archive sizes include
+payloads and recovery metadata. Local totals additionally include SQLite and config.
 
-For this combined corpus, Nenia's archive is 11.01% smaller than per-file Zstd and
-8.89% smaller than solid Zstd. Its original-byte-to-archive ratio is 3.17:1. Claude's
-two-file cohort favors solid Zstd slightly; no result is a universal compression
-claim or a prediction for another user's traces.
+| Layout | Archive bytes | Local total bytes | Initial ingest seconds |
+| --- | ---: | ---: | ---: |
+| Per-file Zstd | 508,865,307 | 508,865,307 | 3.867 |
+| Solid Zstd | 504,077,858 | 504,077,858 | 3.682 |
+| Nenia | 490,614,637 | 492,998,621 | 6.573 |
 
-| Cohort | Per-file median seconds | Solid median seconds | Nenia median seconds | Nenia range seconds |
-| --- | ---: | ---: | ---: | ---: |
-| Claude | 0.0149 | 0.0126 | 0.0346 | 0.0323–0.0390 |
-| Codex | 2.5146 | 2.5315 | 3.1240 | 3.0985–3.2015 |
-| Combined | 2.6069 | 2.5569 | 3.0193 | 2.9952–3.3021 |
+Nenia's archive is **36.61% smaller than the native source files**,
+3.59% smaller than per-file Zstd, and 2.67% smaller than
+solid Zstd on this corpus. Most Mac inputs were already compressed, which limits
+additional compression. Nenia also maintains independent snapshots and a catalog;
+the simpler baselines finish faster. This is not a universal compression claim.
 
-Optional indexing added 5,632,000 local bytes for the combined corpus, bringing the
-local total to 119,912,619 bytes. Its median indexing time was 1.284 seconds. The
-8 MiB extracted-text cap applies separately to each source snapshot, so indexing
-large traces is intentionally partial. The first report's index-size delta is
-relative to initial ingestion, including any unchanged-recapture bookkeeping.
+The selected policy uses 32 KiB average content-defined chunks for raw logs and
+256 KiB fixed chunks for sealed Zstd logs, with 8 MiB raw packs. The previous
+64 KiB policy used about 496.4 MB total locally; the selected policy uses about
+493.0 MB. [Format analysis and controlled experiments](format-analysis.md)
+explain why levels 15/19, smaller chunks everywhere, and encoder-dependent
+transcoding were not selected.
 
-Every unchanged full recapture created zero snapshots and added zero archive bytes.
-For the combined corpus it took a median 0.782 seconds. Metadata-only polling took
-1.770 ms and read zero payload bytes. These are separate measurements from initial
-ingestion.
+Optional full-text indexing added 25,092,096 local bytes
+(median 5.274 seconds), bringing the local total to
+518,090,717 bytes. The index caps extracted text at
+8 MiB per snapshot; compressed source scanning is bounded to 256 MiB decoded bytes.
+One Mac file exceeds that scan budget and receives an explicit metadata warning.
+Its archived bytes remain complete.
 
-During the run, eight original traces actually acquired appends: 1,878,159 new
-source bytes produced 762,106 additional archive bytes. Capture took 0.083 seconds.
-All eight new versions and all 74 original versions restored exactly. This is one
-observed update, not a steady-state append benchmark.
+## Correctness and observed updates
 
-The 27 measured batches produced 1,332 exact restores and zero errors. A separate
-authenticated loopback HTTP push/pull transferred 111 objects and restored all 74
-files into a fresh vault. Deleting the disposable SQLite catalog and reopening the
-vault restored all 74 files again. HTTP testing proves local protocol correctness,
-not WAN throughput or cloud durability.
+- Nine measured batches completed **3,078 exact file restores**, with zero errors.
+- Authenticated loopback HTTP push/pull transferred 427 objects and restored all
+  342 files into a fresh vault. Deleting SQLite and rebuilding restored all 342 again.
+- Every unchanged full recapture added zero snapshots and zero archive bytes.
+  Median full rescan was 2.793 seconds;
+  the size/mtime fast path was 7.050 ms and read zero payload bytes.
+- Eight original live traces had actually grown by 83,433,867 bytes. Their new
+  snapshots added 29,214,851 archive bytes. All eight new versions and all 342
+  original versions restored exactly. Two original live source paths were no
+  longer present; their frozen snapshots remained restorable. No update history
+  was fabricated.
+- The installed Claude callback was separately invoked with an existing private
+  2,166,911-byte transcript. It returned in about 10 ms, the detached worker
+  captured it, and restore matched exactly. The source remained untouched. This
+  tested the official event envelope directly, without making a model request.
 
-Raw evidence: [aggregate corpus](benchmark-results/real-2026-10-28/corpus-aggregate.json),
-[samples](benchmark-results/real-2026-10-28/samples.jsonl),
-[summary](benchmark-results/real-2026-10-28/summary.json),
-[environment](benchmark-results/real-2026-10-28/environment.json),
-[recovery](benchmark-results/real-2026-10-28/recovery.json), and
-[observed growth](benchmark-results/real-2026-10-28/observed-growth.json).
-The run used source commit `93de9ffb39dd499777fc05cd6850ddebd867c7a9`, Zstd 1.5.7,
-and Rust 1.88.0. Source-code and executable hashes identify the measured build;
-those hashes do not identify private trace contents.
+## Method and evidence
 
-## Incoming Mac native files
+Production archive code: `f625fef`; final harness: `c5ab6c6`; Rust 1.88.0,
+Zstd 1.5.7, Linux. Each trial starts fresh and candidate order rotates. Timings
+include source reads, hashing, compression, metadata extraction, durability calls,
+and catalog commit/close. Correctness checks, indexing, unchanged rescans, and
+recovery are measured separately. The host is shared and source data is warm in
+OS cache; no cold-storage or sustained-service performance claim is made. File
+lengths are reported, not filesystem allocation or cloud billing.
 
-All 268 transferred files passed their supplied SHA-256 and length checks, with no
-missing or unlisted traces. The transfer contains 251 native `.jsonl.zst` files
-(362,748,802 bytes) and 17 raw `.jsonl` files (51,827,571 bytes): 414,576,373 native
-bytes total. These containers must restore exactly. Their compressed size must not
-be confused with the size of decoded JSONL.
+The baselines preserve file boundaries and exact bytes, but publish recovery
+mapping only at completion. Their timings do not measure equivalent incremental
+acknowledgment, search, or random-access behavior.
 
-The Mac baseline and controlled compression experiments are in progress. The new
-combined corpus includes the original frozen Framework bytes; it does not recapture
-those changing live sources.
+[Final samples](benchmark-results/real-final-2026-10-28/samples.jsonl) ·
+[Summary](benchmark-results/real-final-2026-10-28/summary.json) ·
+[Environment and code hashes](benchmark-results/real-final-2026-10-28/environment.json) ·
+[Recovery](benchmark-results/real-final-2026-10-28/recovery.json) ·
+[Observed growth](benchmark-results/real-final-2026-10-28/observed-growth.json) ·
+[Actual hook check](benchmark-results/real-hook-2026-10-28.json).
 
-## Method and reproduction
+Earlier Framework-only and native Mac baselines remain in `benchmark-results/`.
+An initial final run completed its timed and recovery checks but failed while
+sampling a live source that had disappeared. Its evidence is retained under
+`real-final-incomplete-2026-10-28`; the harness now counts unavailable originals
+and samples open file handles. No timed samples were discarded or relabeled.
 
-[examples/real_benchmark.rs](../examples/real_benchmark.rs) captures actual source
-files and runs the experiment. Initial comparisons use Zstd level 9 and an 8 MiB
-window, with checksums and declared source lengths. Nenia uses 16/64/256 KiB
-minimum/target/maximum content-defined chunks and 8 MiB raw packs. Baseline mapping
-manifests preserve file boundaries and content hashes privately. No fixtures,
-reconstructed histories, or public datasets contribute to these results.
-
-Each trial starts with a fresh archive. Candidate order rotates across three
-trials. Timing includes source reads, hashing, compression, recovery metadata,
-file and directory synchronization, and Nenia's initial catalog transactions and
-close. Input freezing, correctness checks, unchanged captures, indexing, and
-recovery are outside initial-ingestion timing. Baselines publish their mapping
-manifest only at completion; these timings do not compare equivalent incremental
-acknowledgment or random-access behavior. Source data is warm in the OS cache;
-shared-host load and power state are uncontrolled. Sizes count file lengths,
-not allocated filesystem blocks or cloud billing. No failed trials were excluded.
-
-Run from the repository root, choosing a private directory outside the repository:
+## Reproduce with your own files
 
 ```sh
 cargo build --release --example real_benchmark
@@ -112,8 +104,9 @@ target/release/examples/real_benchmark capture --private-root "$private" --repor
 target/release/examples/real_benchmark run --private-root "$private" --report "$report" --trials 3
 ```
 
-A capture refuses to overwrite an existing private corpus. A run refuses to
-replace existing samples. Detailed errors remain in the private working directory.
-Only the aggregate report directory is suitable for publication. Native `.jsonl.zst`
-bytes are preserved; decoding them, when measured separately, is a diagnostic with
-a different byte-preservation contract.
+Use `capture --source-dir DIRECTORY --cohort LABEL` for another source directory,
+and `--include-corpus PREVIOUS_PRIVATE_ROOT` to combine frozen inputs. Use
+`run --only-cohort combined` to compare the combined collection. Both raw JSONL
+and native compressed JSONL are supported. The harness refuses to put private
+inputs inside the checkout or overwrite an existing corpus/report. Only aggregate
+report directories are suitable for publication.

@@ -1,0 +1,50 @@
+{
+  "mac_codex/nenia": {
+    "archive_bytes_max": 380712741,
+    "archive_bytes_min": 380712005,
+    "errors": 0,
+    "exact_restores": 804,
+    "files": 268,
+    "input_bytes": 414576373,
+    "seconds_min_median_max": [
+      2.41187169,
+      2.444537923,
+      2.7266360670000003
+    ],
+    "total_bytes_max": 382215334,
+    "total_bytes_min": 382195590,
+    "trials": 3
+  },
+  "mac_codex/per_file_zstd": {
+    "archive_bytes_max": 381423512,
+    "archive_bytes_min": 381423512,
+    "errors": 0,
+    "exact_restores": 804,
+    "files": 268,
+    "input_bytes": 414576373,
+    "seconds_min_median_max": [
+      1.3161358490000001,
+      1.337775611,
+      1.391283738
+    ],
+    "total_bytes_max": 381423512,
+    "total_bytes_min": 381423512,
+    "trials": 3
+  },
+  "mac_codex/solid_zstd": {
+    "archive_bytes_max": 379561047,
+    "archive_bytes_min": 379561047,
+    "errors": 0,
+    "exact_restores": 804,
+    "files": 268,
+    "input_bytes": 414576373,
+    "seconds_min_median_max": [
+      1.122459628,
+      1.138432399,
+      1.467673545
+    ],
+    "total_bytes_max": 379561047,
+    "total_bytes_min": 379561047,
+    "trials": 3
+  }
+}

@@ -19,7 +19,7 @@ tempfile = "3"
 walkdir = "2"
 zstd = "0.13"
 object_store = { version = "0.12", features = ["aws"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time", "net", "sync"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time", "net", "sync", "process"] }
 futures = "0.3"
 url = "2"
 axum = "0.8"

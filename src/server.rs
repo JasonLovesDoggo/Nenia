@@ -22,9 +22,15 @@ struct App {
     vault: Arc<Mutex<Vault>>,
     token: Arc<String>,
     uploads: Arc<Semaphore>,
+    downloads: Arc<Semaphore>,
+    index: bool,
 }
 
 pub fn router(vault: Vault, token: String) -> Result<Router> {
+    router_with_index(vault, token, false)
+}
+
+pub fn router_with_index(vault: Vault, token: String, index: bool) -> Result<Router> {
     ensure!(
         token.len() >= 24,
         "server token must contain at least 24 characters"
@@ -33,6 +39,8 @@ pub fn router(vault: Vault, token: String) -> Result<Router> {
         vault: Arc::new(Mutex::new(vault)),
         token: Arc::new(token),
         uploads: Arc::new(Semaphore::new(4)),
+        downloads: Arc::new(Semaphore::new(8)),
+        index,
     };
     let protected = Router::new()
         .route("/v1/objects", get(inventory))
@@ -48,17 +56,81 @@ pub fn router(vault: Vault, token: String) -> Result<Router> {
         .with_state(app))
 }
 
-pub async fn serve(mut vault: Vault, listen: &str, token: String) -> Result<()> {
+pub async fn serve(vault: Vault, listen: &str, token: String) -> Result<()> {
+    serve_with_mirror(
+        vault,
+        listen,
+        token,
+        None,
+        std::time::Duration::from_secs(300),
+        false,
+    )
+    .await
+}
+
+pub async fn serve_with_mirror(
+    mut vault: Vault,
+    listen: &str,
+    token: String,
+    mirror: Option<String>,
+    interval: std::time::Duration,
+    index: bool,
+) -> Result<()> {
+    if let Some(remote) = &mirror {
+        let url = url::Url::parse(remote)?;
+        ensure!(
+            matches!(url.scheme(), "s3" | "file"),
+            "server mirror must use s3:// or file://"
+        );
+        ensure!(
+            interval >= std::time::Duration::from_secs(10),
+            "mirror interval must be at least 10 seconds"
+        );
+    }
     let recovered = vault.reconcile()?;
-    let router = router(vault, token)?;
+    if index {
+        eprintln!(
+            "Indexed {} existing snapshots",
+            vault.index(crate::vault::DEFAULT_INDEX_BYTES)?
+        );
+    }
+    let root = vault.root.clone();
+    let router = router_with_index(vault, token, index)?;
     let listener = TcpListener::bind(listen).await?;
     eprintln!(
         "Nenia listening on {} ({recovered} snapshots recovered)",
         listener.local_addr()?
     );
-    axum::serve(listener, router)
+    let mirror_task = mirror.map(|remote| {
+        tokio::spawn(async move {
+            let options = crate::remote::SyncOptions {
+                verify_existing: false,
+                ..Default::default()
+            };
+            loop {
+                // Archive objects are immutable. Concurrent publication may cause an
+                // inventory miss, which is safely retried; manifests are always last.
+                match crate::remote::push(&root, &remote, &options).await {
+                    Ok(report) => eprintln!(
+                        "Mirror complete: {} new objects, {} bytes",
+                        report.transferred_objects, report.transferred_bytes
+                    ),
+                    Err(error) => eprintln!(
+                        "Mirror pending; retry in {}s: {error:#}",
+                        interval.as_secs()
+                    ),
+                }
+                tokio::time::sleep(interval).await;
+            }
+        })
+    });
+    let result = axum::serve(listener, router)
         .with_graceful_shutdown(shutdown())
-        .await?;
+        .await;
+    if let Some(task) = mirror_task {
+        task.abort();
+    }
+    result?;
     Ok(())
 }
 
@@ -114,8 +186,23 @@ async fn blocking<T: Send + 'static>(
     .map_err(|e| (StatusCode::BAD_REQUEST, format!("{e:#}\n")))
 }
 
-async fn inventory(State(app): State<App>) -> ApiResult<impl IntoResponse> {
-    Ok(Json(blocking(app, |v| v.inventory()).await?))
+#[derive(Deserialize)]
+struct InventoryQuery {
+    after: Option<i64>,
+    watermark: Option<i64>,
+    limit: Option<usize>,
+}
+
+async fn inventory(
+    State(app): State<App>,
+    Query(q): Query<InventoryQuery>,
+) -> ApiResult<impl IntoResponse> {
+    Ok(Json(
+        blocking(app, move |v| {
+            v.inventory_page(q.after.unwrap_or(0), q.watermark, q.limit.unwrap_or(4096))
+        })
+        .await?,
+    ))
 }
 
 async fn download(
@@ -125,14 +212,33 @@ async fn download(
     if !matches!(kind.as_str(), "packs" | "manifests") || pack::validate_hash_id(&id).is_err() {
         return Err((StatusCode::NOT_FOUND, "object not found\n".into()));
     }
+    let permit = app.downloads.clone().try_acquire_owned().map_err(|_| {
+        (
+            StatusCode::TOO_MANY_REQUESTS,
+            "download capacity reached; retry\n".into(),
+        )
+    })?;
     let bytes = blocking(app, move |v| v.object(&kind, &id))
         .await
         .map_err(|(_, e)| (StatusCode::NOT_FOUND, e))?;
     Ok((
         [(header::CONTENT_TYPE, "application/octet-stream")],
-        Body::from(bytes),
+        Body::from(axum::body::Bytes::from_owner(DownloadBytes {
+            bytes,
+            _permit: permit,
+        })),
     )
         .into_response())
+}
+
+struct DownloadBytes {
+    bytes: Vec<u8>,
+    _permit: tokio::sync::OwnedSemaphorePermit,
+}
+impl AsRef<[u8]> for DownloadBytes {
+    fn as_ref(&self) -> &[u8] {
+        &self.bytes
+    }
 }
 
 async fn upload(
@@ -165,7 +271,15 @@ async fn upload(
             "object exceeds size limit\n".into(),
         )
     })?;
-    let created = blocking(app, move |v| v.receive_object(&kind, &id, &bytes)).await?;
+    let index = app.index;
+    let created = blocking(app, move |v| {
+        let created = v.receive_object(&kind, &id, &bytes)?;
+        if index && kind == "manifests" {
+            v.index(crate::vault::DEFAULT_INDEX_BYTES)?;
+        }
+        Ok(created)
+    })
+    .await?;
     drop(permit);
     Ok(if created {
         StatusCode::CREATED

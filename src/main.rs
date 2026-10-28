@@ -1,4 +1,4 @@
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{ensure, Context, Result};
 use clap::{Args, Parser, Subcommand};
 use nenia::{
     adapters::{self, Source},
@@ -10,7 +10,6 @@ use serde::Serialize;
 use std::{
     io,
     path::{Path, PathBuf},
-    process::Command,
     time::Duration,
 };
 
@@ -40,6 +39,9 @@ struct Capture {
     /// Build optional local full-text index after capture (8 MiB text/session).
     #[arg(long)]
     index: bool,
+    /// Re-read unchanged files too, ignoring the size/mtime cache.
+    #[arg(long)]
+    full_scan: bool,
 }
 
 #[derive(Args, Clone)]
@@ -102,6 +104,14 @@ enum Commands {
     Serve {
         #[arg(long, default_value = "127.0.0.1:7433")]
         listen: String,
+        /// Keep an additive off-site copy in S3 or a file:// destination.
+        #[arg(long, env = "NENIA_MIRROR")]
+        mirror: Option<String>,
+        #[arg(long, default_value_t=300, value_parser=clap::value_parser!(u64).range(10..))]
+        mirror_interval: u64,
+        /// Maintain an optional full-text index on the server.
+        #[arg(long)]
+        index: bool,
     },
     /// Upload pending immutable objects without capturing new traces.
     Push {
@@ -192,9 +202,13 @@ fn candidates(capture: &Capture) -> Result<Vec<adapters::Candidate>> {
     }
 }
 
-fn capture(vault: &mut Vault, args: &Capture, json: bool) -> Result<()> {
+fn capture(vault: &mut Vault, args: &Capture, json: bool) -> Result<nenia::vault::IngestReport> {
     let files = candidates(args)?;
-    let report = vault.ingest(&files, args.source)?;
+    let report = if args.full_scan {
+        vault.ingest(&files, args.source)?
+    } else {
+        vault.ingest_changed(&files, args.source)?
+    };
     if json {
         output(&report)?;
     } else {
@@ -207,7 +221,7 @@ fn capture(vault: &mut Vault, args: &Capture, json: bool) -> Result<()> {
         let count = vault.index(nenia::vault::DEFAULT_INDEX_BYTES)?;
         eprintln!("Indexed {count} snapshots");
     }
-    Ok(())
+    Ok(report)
 }
 
 fn connection(vault: &Vault, args: &SyncArgs) -> Result<(String, SyncOptions)> {
@@ -225,7 +239,8 @@ fn connection(vault: &Vault, args: &SyncArgs) -> Result<(String, SyncOptions)> {
     ))
 }
 
-async fn push(vault: &Vault, args: &SyncArgs, json: bool) -> Result<()> {
+async fn push(vault: &Vault, args: &SyncArgs, json: bool) -> Result<remote::SyncReport> {
+    vault.check_catalog_objects()?;
     let (destination, options) = connection(vault, args)?;
     let report = remote::push(&vault.root, &destination, &options)
         .await
@@ -236,17 +251,24 @@ async fn push(vault: &Vault, args: &SyncArgs, json: bool) -> Result<()> {
         output(&report)?;
     } else {
         eprintln!(
-            "Uploaded {} objects ({} bytes); {} already present",
-            report.transferred_objects, report.transferred_bytes, report.existing_objects
+            "Uploaded {} objects ({} bytes); {} already present ({} hash-verified)",
+            report.transferred_objects,
+            report.transferred_bytes,
+            report.existing_objects,
+            report.verified_existing_objects
         );
     }
-    Ok(())
+    Ok(report)
 }
 
 async fn backup(root: &Path, args: &Capture, sync: &SyncArgs, json: bool) -> Result<()> {
     let mut vault = Vault::init(root, 9)?;
-    capture(&mut vault, args, json)?;
-    push(&vault, sync, json).await
+    let captured = capture(&mut vault, args, false)?;
+    let uploaded = push(&vault, sync, false).await?;
+    if json {
+        output(&serde_json::json!({"capture":captured,"upload":uploaded}))?;
+    }
+    Ok(())
 }
 
 #[tokio::main]
@@ -259,7 +281,10 @@ async fn main() {
 
 async fn run() -> Result<()> {
     let cli = Cli::parse();
-    let root = cli.vault.unwrap_or(default_vault()?);
+    let root = match cli.vault {
+        Some(root) => root,
+        None => default_vault()?,
+    };
     match cli.command {
         Commands::Init { compression_level } => {
             let vault = Vault::init(&root, compression_level)?;
@@ -291,7 +316,7 @@ async fn run() -> Result<()> {
             if matches!(url.scheme(), "http" | "https") {
                 ensure!(
                     token.as_ref().is_some_and(|t| t.len() >= 24),
-                    "set NENIA_TOKEN to your server's token (at least24 characters)"
+                    "set NENIA_TOKEN to your server's token (at least 24 characters)"
                 );
             }
             vault.connect(remote.clone(), token)?;
@@ -299,7 +324,7 @@ async fn run() -> Result<()> {
         }
         Commands::Discover => output(&adapters::discover(&home()?)?)?,
         Commands::Ingest { capture: args } => {
-            capture(&mut Vault::init(&root, 9)?, &args, cli.json)?
+            capture(&mut Vault::init(&root, 9)?, &args, cli.json)?;
         }
         Commands::Backup {
             capture: args,
@@ -328,16 +353,25 @@ async fn run() -> Result<()> {
             paths,
             command,
         } => {
-            let status = Command::new(&command[0])
+            let mut child = tokio::process::Command::new(&command[0])
                 .args(&command[1..])
-                .status()
+                .spawn()
                 .with_context(|| format!("start {}", command[0]))?;
+            // The child inherits the terminal/process group. Let it handle Ctrl-C,
+            // while the wrapper stays alive to archive its final trace records.
+            let status = loop {
+                tokio::select! {
+                    result = child.wait() => break result?,
+                    _ = tokio::signal::ctrl_c() => {},
+                }
+            };
             let result = backup(
                 &root,
                 &Capture {
                     paths,
                     source: Source::Auto,
                     index: false,
+                    full_scan: false,
                 },
                 &sync,
                 cli.json,
@@ -345,20 +379,41 @@ async fn run() -> Result<()> {
             .await;
             if let Err(e) = result {
                 eprintln!("Post-session backup pending: {e:#}");
-                if status.success() {
-                    bail!("agent finished but backup has not reached the remote");
-                }
             }
             if !status.success() {
-                std::process::exit(status.code().unwrap_or(1));
+                #[cfg(unix)]
+                let code = {
+                    use std::os::unix::process::ExitStatusExt;
+                    status
+                        .code()
+                        .unwrap_or_else(|| 128 + status.signal().unwrap_or(1))
+                };
+                #[cfg(not(unix))]
+                let code = status.code().unwrap_or(1);
+                std::process::exit(code);
             }
         }
-        Commands::Serve { listen } => {
+        Commands::Serve {
+            listen,
+            mirror,
+            mirror_interval,
+            index,
+        } => {
             let token = std::env::var("NENIA_TOKEN")
-                .context("set NENIA_TOKEN to a random token of at least24 characters")?;
-            server::serve(Vault::init(&root, 9)?, &listen, token).await?;
+                .context("set NENIA_TOKEN to a random token of at least 24 characters")?;
+            server::serve_with_mirror(
+                Vault::init(&root, 9)?,
+                &listen,
+                token,
+                mirror,
+                Duration::from_secs(mirror_interval),
+                index,
+            )
+            .await?;
         }
-        Commands::Push { sync } => push(&Vault::open(&root)?, &sync, cli.json).await?,
+        Commands::Push { sync } => {
+            push(&Vault::open(&root)?, &sync, cli.json).await?;
+        }
         Commands::Pull { sync } => {
             let mut vault = Vault::init(&root, 9)?;
             let (source, mut options) = connection(&vault, &sync)?;
@@ -413,7 +468,7 @@ async fn run() -> Result<()> {
         }
         Commands::Verify => output(&Vault::open(&root)?.verify()?)?,
         Commands::Rebuild => {
-            output(&serde_json::json!({"recovered":Vault::open(&root)?.rebuild()?}))?
+            output(&serde_json::json!({"recovered":Vault::rebuild_catalog(&root)?}))?
         }
         Commands::Stats => output(&Vault::open(&root)?.stats()?)?,
     }

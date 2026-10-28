@@ -483,16 +483,17 @@ fn main() -> Result<()> {
     }
     let environment = json!({
         "created_at":Utc::now().to_rfc3339(),"command":std::env::args().collect::<Vec<_>>(),
-        "seed":format!("{SEED:016x}"),"trials":args.trials,"scale":args.scale,"level":args.level,"zstd_window_log":23,
+        "seed":format!("{SEED:016x}"),"trials":args.trials,"scale":args.scale,"level":args.level,"zstd_window_log":23,"zstd_version":zstd::zstd_safe::version_string(),
         "os":std::env::consts::OS,"arch":std::env::consts::ARCH,"available_parallelism":std::thread::available_parallelism().ok().map(|n|n.get()),
         "git":command("git", &["rev-parse","HEAD"]),"git_status":command("git", &["status","--short"]),
         "source_blake3":source_hashes,
         "executable_blake3":blake3::hash(&fs::read(std::env::current_exe()?)?).to_hex().to_string(),
         "rustc":command("rustc", &["-Vv"]),"uname":command("uname", &["-a"]),"cpu":command("lscpu", &[]),
         "memory":command("free", &["-b"]),"filesystem":command("df", &["-T",args.output.to_string_lossy().as_ref()]),
+        "storage_devices":command("lsblk", &["-d","-o","NAME,MODEL,ROTA"]),
         "cgroup_cpu_max":fs::read_to_string("/sys/fs/cgroup/cpu.max").ok(),
         "cgroup_memory_max":fs::read_to_string("/sys/fs/cgroup/memory.max").ok(),
-        "limitations":["OS cache not dropped; fresh archive directories, warm source data", "Concurrent development/build work and host interference are uncontrolled", "Short batch throughput, not sustained service capacity", "File lengths, not allocated filesystem blocks or object-store billing", "Power/thermal state and underlying virtual block-device hardware unknown"]
+        "limitations":["OS cache not dropped; fresh archive directories, warm source data", "Concurrent development/build work and host interference are uncontrolled", "Short batch throughput, not sustained service capacity", "File lengths, not allocated filesystem blocks or object-store billing", "Power and thermal state are uncontrolled; physical persistence was not crash-tested"]
     });
     fs::write(
         args.output.join("environment.json"),

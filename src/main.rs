@@ -2,6 +2,7 @@ use anyhow::{ensure, Context, Result};
 use clap::{Args, Parser, Subcommand};
 use nenia::{
     adapters::{self, Source},
+    hooks,
     remote::{self, SyncOptions},
     server,
     vault::Vault,
@@ -56,8 +57,30 @@ struct SyncArgs {
     concurrency: u8,
 }
 
+#[derive(Clone, Copy, clap::ValueEnum)]
+enum HookProvider {
+    Claude,
+}
+
+#[derive(Subcommand)]
+enum HooksAction {
+    /// Install event-driven backups in the provider's user settings.
+    Install { provider: HookProvider },
+    /// Remove only Nenia-managed hooks, preserving other settings.
+    Uninstall { provider: HookProvider },
+    /// Capture queued events and retry pending uploads without polling agent folders.
+    Drain,
+}
+
 #[derive(Subcommand)]
 enum Commands {
+    /// Manage event-driven agent backups.
+    Hooks {
+        #[command(subcommand)]
+        action: HooksAction,
+    },
+    /// Receive a provider hook event on stdin; queues work and returns immediately.
+    Hook { provider: HookProvider },
     /// Create an offline spool or server data directory.
     Init {
         #[arg(long, default_value_t = 9, allow_hyphen_values = true)]
@@ -286,6 +309,67 @@ async fn run() -> Result<()> {
         None => default_vault()?,
     };
     match cli.command {
+        Commands::Hooks { action } => match action {
+            HooksAction::Install {
+                provider: HookProvider::Claude,
+            } => {
+                drop(Vault::init(&root, 9)?);
+                let report = hooks::install_claude(
+                    &hooks::claude_settings(&home()?),
+                    &std::env::current_exe()?,
+                    &root,
+                )?;
+                if cli.json {
+                    output(&report)?;
+                } else {
+                    eprintln!(
+                        "{} Claude Stop and SessionEnd hooks in {}",
+                        if report.changed {
+                            "Installed"
+                        } else {
+                            "Already installed:"
+                        },
+                        report.settings.display()
+                    );
+                    if let Some(backup) = report.backup {
+                        eprintln!("Original settings saved to {}", backup.display());
+                    }
+                }
+            }
+            HooksAction::Uninstall {
+                provider: HookProvider::Claude,
+            } => {
+                let report = hooks::uninstall_claude(&hooks::claude_settings(&home()?))?;
+                if cli.json {
+                    output(&report)?;
+                } else {
+                    eprintln!(
+                        "{}",
+                        if report.changed {
+                            "Removed Nenia's Claude hooks"
+                        } else {
+                            "No Nenia hooks installed"
+                        }
+                    );
+                }
+            }
+            HooksAction::Drain => {
+                output(&hooks::drain(&root, Duration::from_secs(600)).await?)?;
+            }
+        },
+        Commands::Hook {
+            provider: HookProvider::Claude,
+        } => {
+            let result = (|| -> Result<()> {
+                hooks::queue_claude(&root, &home()?, io::stdin().lock())?;
+                hooks::wake_worker(&root, &std::env::current_exe()?)?;
+                Ok(())
+            })();
+            // Hook errors must never become a Stop decision or block Claude's shutdown.
+            if let Err(error) = result {
+                eprintln!("nenia hook: {error:#}");
+            }
+        }
         Commands::Init { compression_level } => {
             let vault = Vault::init(&root, compression_level)?;
             if cli.json {

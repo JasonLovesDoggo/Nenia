@@ -22,7 +22,9 @@ and exact end of the single frame. Extra frames/trailing bytes are rejected.
 The encoded pack limit is 8 MiB + 64 KiB, allowing incompressible data overhead.
 
 A snapshot is limited to 262,144 chunk references. The chunking policy is deterministic Gear hashing with a fixed SplitMix64 table:
-16 KiB minimum, approximately 64 KiB average, and 256 KiB maximum. The final chunk
+8 KiB minimum, approximately 32 KiB average, and 256 KiB maximum for raw logs.
+Sealed `.jsonl.zst` sources use fixed 256 KiB chunks to avoid redundant rolling
+hashes and excessive catalog entries. Both policies share the same format. The final chunk
 may be smaller than the minimum. Empty files have no chunks. Readers do not need
 the chunker or its table: manifests supply every offset and length. A future
 chunking policy can therefore coexist with current readers without recompressing

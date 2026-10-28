@@ -11,8 +11,8 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::path::Path;
 
-pub const MIN_CHUNK_SIZE: usize = 16 * 1024;
-pub const AVG_CHUNK_SIZE: usize = 64 * 1024;
+pub const MIN_CHUNK_SIZE: usize = 8 * 1024;
+pub const AVG_CHUNK_SIZE: usize = 32 * 1024;
 pub const MAX_CHUNK_SIZE: usize = 256 * 1024;
 pub const MAX_PACK_RAW_SIZE: usize = 8 * 1024 * 1024;
 /// Includes room for the worst-case Zstd overhead of an incompressible pack.
@@ -23,7 +23,7 @@ const VERSION: u16 = 1;
 const HEADER_SIZE: usize = 20;
 const WINDOW_LOG: u32 = 23;
 // Including the mandatory minimum, a uniformly distributed fingerprint has an
-// expected chunk length of 64 KiB (slightly less because of the maximum bound).
+// expected chunk length of 32 KiB (slightly less because of the maximum bound).
 const CUT_THRESHOLD: u64 = u64::MAX / (AVG_CHUNK_SIZE - MIN_CHUNK_SIZE) as u64;
 const GEAR: [u64; 256] = gear_table();
 
@@ -59,6 +59,7 @@ pub struct ChunkRef {
 pub struct Chunker<R: Read> {
     reader: BufReader<R>,
     done: bool,
+    fixed: bool,
 }
 
 impl<R: Read> Chunker<R> {
@@ -66,12 +67,35 @@ impl<R: Read> Chunker<R> {
         Self {
             reader: BufReader::with_capacity(AVG_CHUNK_SIZE, reader),
             done: false,
+            fixed: false,
         }
+    }
+
+    /// Sealed compressed streams rarely share shifted plaintext chunks. Larger
+    /// fixed blocks avoid rolling-hash work and excess catalog entries for them.
+    pub fn new_fixed(reader: R) -> Self {
+        let mut chunker = Self::new(reader);
+        chunker.fixed = true;
+        chunker
     }
 
     pub fn next_chunk(&mut self) -> io::Result<Option<Vec<u8>>> {
         if self.done {
             return Ok(None);
+        }
+        if self.fixed {
+            let mut chunk = Vec::with_capacity(MAX_CHUNK_SIZE);
+            if let Err(error) = self
+                .reader
+                .by_ref()
+                .take(MAX_CHUNK_SIZE as u64)
+                .read_to_end(&mut chunk)
+            {
+                self.done = true;
+                return Err(error);
+            }
+            self.done = chunk.len() < MAX_CHUNK_SIZE;
+            return Ok((!chunk.is_empty()).then_some(chunk));
         }
         let mut chunk = Vec::with_capacity(AVG_CHUNK_SIZE);
         let mut fingerprint = 0_u64;
@@ -387,6 +411,21 @@ mod tests {
     }
 
     #[test]
+    fn fixed_chunks_preserve_empty_exact_and_partial_blocks() {
+        for len in [0, 1, MAX_CHUNK_SIZE, MAX_CHUNK_SIZE * 3 + 17] {
+            let data = random_bytes(len);
+            let got = Chunker::new_fixed(data.as_slice())
+                .collect::<io::Result<Vec<_>>>()
+                .unwrap();
+            assert_eq!(got.concat(), data);
+            assert_eq!(got.len(), len.div_ceil(MAX_CHUNK_SIZE));
+            assert!(got
+                .iter()
+                .all(|chunk| !chunk.is_empty() && chunk.len() <= MAX_CHUNK_SIZE));
+        }
+    }
+
+    #[test]
     fn insertion_reuses_existing_chunks() {
         let original = random_bytes(3 * 1024 * 1024);
         let mut edited = original.clone();
@@ -429,6 +468,18 @@ mod tests {
         .collect::<io::Result<Vec<_>>>()
         .unwrap();
         assert_eq!(fragmented, chunks(&data));
+        let fixed = Chunker::new_fixed(Fragmented {
+            data: &data,
+            interrupt: true,
+        })
+        .collect::<io::Result<Vec<_>>>()
+        .unwrap();
+        assert_eq!(
+            fixed,
+            data.chunks(MAX_CHUNK_SIZE)
+                .map(|c| c.to_vec())
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]

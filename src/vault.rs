@@ -610,7 +610,11 @@ impl Vault {
                 &path,
             )?;
             file.rewind()?;
-            let mut reader = Chunker::new(file.take(initial.len()));
+            let mut reader = if adapters::is_zstd_source(&path) {
+                Chunker::new_fixed(file.take(initial.len()))
+            } else {
+                Chunker::new(file.take(initial.len()))
+            };
             let mut hasher = blake3::Hasher::new();
             let mut hashes = Vec::new();
             let mut size = 0u64;

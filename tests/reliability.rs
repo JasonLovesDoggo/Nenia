@@ -112,14 +112,21 @@ fn non_utf8_paths_fail_explicitly_instead_of_aliasing_source_identity() {
         let source = directory
             .path()
             .join(std::ffi::OsString::from_vec(b"trace-\xff.txt".to_vec()));
-        fs::write(&source, b"preserve identity as well as bytes").unwrap();
+        let created = match fs::write(&source, b"preserve identity as well as bytes") {
+            Ok(()) => true,
+            // APFS rejects invalid Unicode filenames before the application sees them.
+            Err(error) if error.raw_os_error() == Some(libc::EILSEQ) => false,
+            Err(error) => panic!("create source fixture: {error}"),
+        };
         let result = if fast {
             vault.ingest_changed(&[candidate(&source)], Source::Generic)
         } else {
             vault.ingest(&[candidate(&source)], Source::Generic)
         };
         let error = result.unwrap_err();
-        assert!(format!("{error:#}").contains("UTF-8"));
+        if created {
+            assert!(format!("{error:#}").contains("UTF-8"));
+        }
         assert!(vault.list(None, 10, true).unwrap().is_empty());
     }
 }

@@ -2,11 +2,16 @@ name: CI
 
 on:
   push:
+    paths-ignore: ['docs/**', 'README.md', 'LICENSE']
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   native:

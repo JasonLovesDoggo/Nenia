@@ -199,7 +199,7 @@ pub fn inspect<R: BufRead>(reader: R, source_hint: Source, path: &Path) -> io::R
                     metadata.malformed_lines += 1;
                 }
                 if !looks_json(bytes) && metadata.title.is_none() {
-                    if let Ok(text) = std::str::from_utf8(bytes) {
+                    if let Some(text) = plain_text(bytes) {
                         metadata.title = title(text);
                     }
                 }
@@ -224,13 +224,24 @@ pub fn index_text<R: BufRead>(reader: R, max_bytes: usize) -> io::Result<String>
         match record {
             Record::Json(value) => collect_text(value, &mut text, max_bytes, 0),
             Record::Raw(bytes, _) if !looks_json(bytes) => {
-                append_text(&mut text, &String::from_utf8_lossy(bytes), max_bytes);
+                if let Some(plain) = plain_text(bytes) {
+                    append_text(&mut text, plain, max_bytes);
+                }
             }
             Record::Raw(_, _) => {}
         }
         text.len() < max_bytes
     })?;
     Ok(text)
+}
+
+fn plain_text(bytes: &[u8]) -> Option<&str> {
+    let text = std::str::from_utf8(bytes).ok()?;
+    let controls = bytes
+        .iter()
+        .filter(|b| b.is_ascii_control() && !b"\t\r\n".contains(b))
+        .count();
+    (!bytes.contains(&0) && controls <= bytes.len() / 20).then_some(text)
 }
 
 fn inspect_value(value: &Value, detect: bool, metadata: &mut Metadata) {
@@ -591,7 +602,7 @@ mod tests {
         assert_eq!(got.title.as_deref(), Some("plain final line"));
         let text = index_text(Cursor::new(input), 1024).unwrap();
         assert!(text.contains("plain final line"));
-        assert!(text.contains('\u{fffd}'));
+        assert!(!text.contains('\u{fffd}'));
     }
 
     #[test]
@@ -635,6 +646,16 @@ mod tests {
         assert_eq!(
             index_text(Cursor::new(input), 1024).unwrap(),
             "Wrapped export\n"
+        );
+    }
+
+    #[test]
+    fn binary_data_does_not_become_lossy_search_tokens() {
+        let mut bytes = vec![0; 64 * 1024];
+        bytes.extend_from_slice(b"\n\xff\xfe garbage\n\x01\x02\x03binary\nreadable final line\n");
+        assert_eq!(
+            index_text(Cursor::new(bytes), 1024).unwrap(),
+            "readable final line\n"
         );
     }
 

@@ -55,8 +55,8 @@ Strings retained as metadata are bounded; titles are at most 160 characters.
 Optional search text contains readable string values and plain text, with
 common image/audio/base64/signature fields excluded. It is capped by the caller
 (the CLI uses 8 MiB per snapshot), respects UTF-8 boundaries, and omits oversized
-JSON records. Invalid plain-text UTF-8 is replaced only in the disposable search
-text. This index is a convenience, not a complete or sanitized copy: prompts,
+JSON records. Raw records with invalid UTF-8, NULs, or many control characters
+are excluded from the index. This index is a convenience, not a complete or sanitized copy: prompts,
 tool arguments, and output can still contain secrets. The exact raw archive is
 never redacted or truncated by the index policy.
 

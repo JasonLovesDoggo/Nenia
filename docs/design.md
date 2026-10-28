@@ -72,9 +72,9 @@ acceptance and off-site replication completion are distinct events in logs.
 
 ## Why no novel codec, distributed database, or compulsory search index
 
-The benchmark includes independent traces, append histories, forks, and random
-binary data. Deduplication helps overlapping histories substantially; a single
-solid Zstd stream can still win on space. Nenia trades some compression density
+The benchmark uses actual local Codex and Claude sessions plus pinned public
+trace datasets. It compares complete archives with per-file and solid Zstd,
+verifying every restored byte. A solid stream can still win on space. Nenia trades some compression density
 for bounded reads, incremental uploads, independent snapshots, and recoverable
 metadata. The full-text index can outweigh the compressed archive, so it is opt-in.
 

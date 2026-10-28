@@ -77,10 +77,13 @@ The discovery paths were checked against the following primary sources:
   entries. [Pi's session guide](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/sessions.md)
   documents directory selection and exported JSONL.
 
-Tests use handwritten synthetic data only, covering each adapter, JSON arrays,
+Unit fixtures cover each adapter, JSON arrays,
 pretty JSON, Markdown, malformed Unicode, interrupted writes, oversized records,
 bounded indexing, environment roots, and symlink handling. No personal trace
 contents are used or checked into this repository. The adapter and its tests
 also pass cross-target `cargo check` for Windows MSVC and macOS ARM64. Runtime
 verification on this development host is Linux; native Windows and macOS
 execution still needs CI.
+
+Storage and restore measurements use actual local sessions and public traces; see
+[the real-trace benchmark](benchmarks.md). Private session contents are not published.

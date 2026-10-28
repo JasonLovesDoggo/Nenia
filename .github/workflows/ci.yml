@@ -64,13 +64,15 @@ jobs:
       - name: Start and probe local server
         shell: bash
         run: |
+          NENIA_TOKEN="$(openssl rand -hex 32)"
+          echo "::add-mask::$NENIA_TOKEN"
           docker run --detach --name nenia-ci \
             --publish 127.0.0.1:7433:7433 \
-            --env NENIA_TOKEN=synthetic-ci-local-token-0123456789 nenia:ci
+            --env NENIA_TOKEN="$NENIA_TOKEN" nenia:ci
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:7433/healthz; then
               curl --fail --silent \
-                --header 'Authorization: Bearer synthetic-ci-local-token-0123456789' \
+                --header "Authorization: Bearer $NENIA_TOKEN" \
                 http://127.0.0.1:7433/v1/snapshots
               exit 0
             fi

@@ -591,6 +591,35 @@ async fn write_local(root: &Path, object: &Object, bytes: Vec<u8>) -> Result<Syn
     .await?
 }
 
+/// A previous attempt may have published a file before its directory sync failed.
+/// Flush phase directories even when every addressed object was already present.
+async fn sync_local_directory(directory: &Path) -> Result<()> {
+    #[cfg(unix)]
+    {
+        let directory = directory.to_owned();
+        tokio::task::spawn_blocking(move || {
+            match fs::symlink_metadata(&directory) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+                Err(error) => return Err(error.into()),
+                Ok(metadata) => ensure!(
+                    metadata.file_type().is_dir(),
+                    "archive directory must not be a symlink: {}",
+                    directory.display()
+                ),
+            }
+            File::open(&directory)?
+                .sync_all()
+                .with_context(|| format!("flush archive directory {}", directory.display()))
+        })
+        .await?
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = directory;
+        Ok(())
+    }
+}
+
 fn check_options(options: &SyncOptions) -> Result<()> {
     ensure!(
         (1..=32).contains(&options.concurrency),
@@ -652,6 +681,13 @@ pub async fn push(vault: &Path, remote: &str, options: &SyncOptions) -> Result<S
         while let Some(result) = results.try_next().await? {
             report.add(result);
         }
+        if let Some(root) = &remote.local_root {
+            sync_local_directory(&root.join(kind.directory())).await?;
+        }
+    }
+    if let Some(root) = &remote.local_root {
+        // Persist newly created packs/ and manifests/ directory entries as well.
+        sync_local_directory(root).await?;
     }
     Ok(report)
 }
@@ -708,6 +744,8 @@ pub async fn pull(vault: &Path, remote: &str, options: &SyncOptions) -> Result<S
         while let Some(result) = results.try_next().await? {
             report.add(result);
         }
+        sync_local_directory(&vault.join(kind.directory())).await?;
     }
+    sync_local_directory(vault).await?;
     Ok(report)
 }

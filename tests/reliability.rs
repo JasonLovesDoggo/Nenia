@@ -68,6 +68,63 @@ fn a_missing_manifest_cannot_be_reported_as_an_unchanged_successful_capture() {
 }
 
 #[test]
+fn capture_revisions_keep_latest_correct_after_clock_rollback_and_rebuild() {
+    let directory = tempdir().unwrap();
+    let mut vault = Vault::init(&directory.path().join("vault"), 1).unwrap();
+    let source = directory.path().join("clock.txt");
+    fs::write(&source, b"first capture").unwrap();
+    let first = vault
+        .ingest(&[candidate(&source)], Source::Generic)
+        .unwrap();
+    fs::write(&source, b"second capture is current").unwrap();
+    let second = vault
+        .ingest(&[candidate(&source)], Source::Generic)
+        .unwrap();
+    let mut older = vault.manifest(&first.snapshots[0]).unwrap();
+    assert_eq!(older.revision, 1);
+    assert_eq!(vault.manifest(&second.snapshots[0]).unwrap().revision, 2);
+    older.captured_at = "2099-01-01T00:00:00+00:00".into();
+    let encoded = zstd::encode_all(serde_json::to_vec(&older).unwrap().as_slice(), 1).unwrap();
+    let id = blake3::hash(&encoded).to_hex().to_string();
+    vault.receive_object("manifests", &id, &encoded).unwrap();
+    for rebuild in [false, true] {
+        if rebuild {
+            vault.rebuild().unwrap();
+        }
+        let latest = vault.list(None, 10, false).unwrap();
+        assert_eq!(latest.len(), 1);
+        assert_eq!(latest[0].id, second.snapshots[0]);
+        let unchanged = vault
+            .ingest(&[candidate(&source)], Source::Generic)
+            .unwrap();
+        assert_eq!(unchanged.unchanged, 1);
+        assert_eq!(unchanged.archived, 0);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn non_utf8_paths_fail_explicitly_instead_of_aliasing_source_identity() {
+    use std::os::unix::ffi::OsStringExt;
+    for fast in [false, true] {
+        let directory = tempdir().unwrap();
+        let mut vault = Vault::init(&directory.path().join("vault"), 1).unwrap();
+        let source = directory
+            .path()
+            .join(std::ffi::OsString::from_vec(b"trace-\xff.txt".to_vec()));
+        fs::write(&source, b"preserve identity as well as bytes").unwrap();
+        let result = if fast {
+            vault.ingest_changed(&[candidate(&source)], Source::Generic)
+        } else {
+            vault.ingest(&[candidate(&source)], Source::Generic)
+        };
+        let error = result.unwrap_err();
+        assert!(format!("{error:#}").contains("UTF-8"));
+        assert!(vault.list(None, 10, true).unwrap().is_empty());
+    }
+}
+
+#[test]
 fn restore_never_publishes_partial_output_when_a_later_pack_is_corrupt() {
     let directory = tempdir().unwrap();
     let output_directory = tempdir().unwrap();

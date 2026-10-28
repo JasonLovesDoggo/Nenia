@@ -53,6 +53,10 @@ files. On Unix the parent directory is also flushed. Archive subdirectories and
 addressed objects must not be symlinks. Durability depends on the underlying disk
 and filesystem; this transport does not add replication.
 
+On Unix a completed sync also flushes the pack and manifest directories, including
+when all objects were already present, and then the archive root. A retry therefore
+repeats directory flushes that may have failed after an earlier file publication.
+
 S3 uses the Rust `object_store` AWS backend. Create the bucket first, supply
 credentials through the environment or supported AWS credential providers, and
 grant list, get, and put access to the archive prefix. Nenia does not require delete

@@ -3,6 +3,8 @@
 /bench-output/
 /dist/
 *.tmp
+__pycache__/
+*.py[cod]
 
 # Local credentials and provider state, never publication inputs.
 .env

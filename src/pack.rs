@@ -7,7 +7,7 @@
 
 use anyhow::{bail, ensure, Context, Result};
 use serde::{Deserialize, Serialize};
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::path::Path;
 
@@ -288,7 +288,12 @@ pub fn atomic_write_immutable(path: &Path, bytes: &[u8]) -> Result<bool> {
             Ok(true)
         }
         Err(error) if error.error.kind() == io::ErrorKind::AlreadyExists => {
-            let mut existing = File::open(path)?;
+            // Windows FlushFileBuffers requires a handle opened for writing,
+            // even though verification itself never modifies existing bytes.
+            let mut existing = OpenOptions::new()
+                .read(true)
+                .write(cfg!(windows))
+                .open(path)?;
             ensure!(
                 existing.metadata()?.len() == bytes.len() as u64,
                 "existing object has different length: {}",

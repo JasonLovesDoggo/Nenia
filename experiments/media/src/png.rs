@@ -351,7 +351,40 @@ pub fn encode(data: &[u8]) -> Result<(Vec<u8>, BTreeMap<String, u64>)> {
         Ok((fallback, stats))
     }
 }
-pub fn decode(mut input: &[u8]) -> Result<Vec<u8>> {
+pub fn decode(input: &[u8]) -> Result<Vec<u8>> {
+    decode_with_pixels(input, |_| {
+        anyhow::bail!("external pixels require a resolver")
+    })
+}
+
+pub fn externalize(input: &[u8], reference: &[u8]) -> Result<Option<Vec<u8>>> {
+    ensure!(
+        input.len() >= 45 && &input[..8] == b"NENIAPG1",
+        "PNG container header"
+    );
+    if input[8] == 0 {
+        return Ok(None);
+    }
+    ensure!(input[8] == 1, "PNG container mode");
+    let mut body = &input[45..];
+    let correction_kind = take(&mut body, 1)?[0];
+    let _ = take(&mut body, 1)?;
+    let side = section(&mut body)?;
+    let correction = section(&mut body)?;
+    let _ = section(&mut body)?;
+    ensure!(body.is_empty(), "PNG body tail");
+    let mut out = input[..45].to_vec();
+    out.extend([correction_kind, 2]);
+    blob(&mut out, side);
+    blob(&mut out, correction);
+    blob(&mut out, reference);
+    Ok(Some(out))
+}
+
+pub fn decode_with_pixels(
+    mut input: &[u8],
+    mut resolve: impl FnMut(&[u8]) -> Result<Vec<u8>>,
+) -> Result<Vec<u8>> {
     ensure!(
         input.len() <= LIMIT && take(&mut input, 8)? == b"NENIAPG1",
         "asset header/size"
@@ -395,6 +428,7 @@ pub fn decode(mut input: &[u8]) -> Result<Vec<u8>> {
                 ensure!(depth == 8, "WebP bit depth");
                 webp_decode(pixel, width, height, channels)?
             }
+            2 => resolve(pixel)?,
             _ => anyhow::bail!("pixel codec"),
         };
         let raw = refilter(

@@ -3,7 +3,7 @@
 use anyhow::{Result, ensure};
 use nenia_media_screen::{
     pack::{self, ChunkRef, Chunker, PackBuilder},
-    png,
+    png, shared_pixels,
     structure::{self, Recipe},
 };
 use serde::{Deserialize, Serialize};
@@ -127,9 +127,9 @@ impl Cache {
         pack::extract_chunk(&self.entries.front().unwrap().1, chunk)
     }
 }
-fn asset_decode(codec: u8, data: &[u8]) -> Result<Vec<u8>> {
+fn asset_decode(codec: u8, data: &[u8], pixels: &mut shared_pixels::Reader) -> Result<Vec<u8>> {
     if codec == 1 {
-        return png::decode(data);
+        return png::decode_with_pixels(data, |token| pixels.resolve(token));
     }
     ensure!(
         codec == 2 && data.len() >= 45 && &data[..8] == b"NENIAJP1",
@@ -167,8 +167,8 @@ fn asset_decode(codec: u8, data: &[u8]) -> Result<Vec<u8>> {
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().collect();
     ensure!(
-        args.len() == 8,
-        "usage: trace-archive CORPUS PRIVATE_ASSETS PRIVATE_PNG_OR_DASH PRIVATE_JPEG_OR_DASH PRIVATE_OUTPUT REPORT original|all"
+        (8..=9).contains(&args.len()),
+        "usage: trace-archive CORPUS PRIVATE_ASSETS PRIVATE_PNG_OR_DASH PRIVATE_JPEG_OR_DASH PRIVATE_OUTPUT REPORT original|all [PRIVATE_PIXEL_STORE]"
     );
     let mut corpus: Corpus = serde_json::from_slice(&fs::read(&args[1])?)?;
     corpus.files.sort_by_key(|f| {
@@ -211,8 +211,13 @@ fn main() -> Result<()> {
             continue;
         }
         let source = fs::read(Path::new(&args[2]).join(&asset.file))?;
-        prepared.insert(blake3::hash(&source), (path, codec));
+        prepared.insert(blake3::hash(&source), (path, codec, i));
     }
+    let prepared_pixels = args
+        .get(8)
+        .map(|p| shared_pixels::Prepared::open(Path::new(p)))
+        .transpose()?;
+    let mut pixels = shared_pixels::Reader::new(root.join("pixels"));
     let mut store = Store::new(root.join("packs"))?;
     let mut media = Store::new(root.join("media"))?;
     let mut saved = HashMap::<blake3::Hash, usize>::new();
@@ -250,16 +255,24 @@ fn main() -> Result<()> {
                     return Ok(None);
                 }
                 let hash = blake3::hash(data);
-                let Some((path, codec)) = prepared.get(&hash) else {
+                let Some((path, codec, ordinal)) = prepared.get(&hash) else {
                     return Ok(None);
                 };
                 asset_occurrences += 1;
                 let global = if let Some(&id) = saved.get(&hash) {
                     id
                 } else {
-                    let encoded = fs::read(path)?;
+                    let mut encoded = fs::read(path)?;
+                    if *codec == 1
+                        && encoded.get(8) == Some(&1)
+                        && let Some(prepared_pixels) = &prepared_pixels
+                        && let Some(token) =
+                            prepared_pixels.materialize(*ordinal, &root.join("pixels"))?
+                    {
+                        encoded = png::externalize(&encoded, &token)?.expect("transformed PNG");
+                    }
                     ensure!(
-                        asset_decode(*codec, &encoded)? == data,
+                        asset_decode(*codec, &encoded, &mut pixels)? == data,
                         "prepared asset differs"
                     );
                     let mut parts = Vec::new();
@@ -322,6 +335,15 @@ fn main() -> Result<()> {
         manifest_bytes += encoded.len() as u64;
         fs::write(root.join("manifests").join(format!("{i:06}.zstd")), encoded)?;
     }
+    let pixel_bytes = if root.join("pixels").exists() {
+        fs::read_dir(root.join("pixels"))?
+            .map(|p| p.and_then(|p| p.metadata()).map(|m| m.len()))
+            .collect::<std::io::Result<Vec<_>>>()?
+            .iter()
+            .sum::<u64>()
+    } else {
+        0
+    };
     let payload_bytes = store.bytes;
     let media_bytes = media.bytes;
     let assets = global_assets.len();
@@ -333,6 +355,7 @@ fn main() -> Result<()> {
     drop(media);
     drop(prepared);
     let start = Instant::now();
+    let mut pixels = shared_pixels::Reader::new(root.join("pixels"));
     let mut cache = Cache {
         root: root.join("packs"),
         entries: VecDeque::new(),
@@ -374,7 +397,7 @@ fn main() -> Result<()> {
                             blake3::hash(&encoded).to_hex().as_str() == asset.encoded_hash,
                             "asset encoded hash"
                         );
-                        let decoded = asset_decode(asset.codec, &encoded)?;
+                        let decoded = asset_decode(asset.codec, &encoded, &mut pixels)?;
                         ensure!(
                             decoded.len() == asset.bytes
                                 && blake3::hash(&decoded).to_hex().as_str() == asset.hash,
@@ -441,7 +464,7 @@ fn main() -> Result<()> {
             eprintln!("{} exact trace restores", i + 1);
         }
     }
-    let report = serde_json::json!({"candidate":"reversible-media-trace-archive","scope":"Complete trace bytes and source metadata; no disposable SQLite index; asset preprocessing time excluded and reported separately; one exploratory trial","files":corpus.files.len(),"input_bytes":bytes,"archive_bytes":payload_bytes+media_bytes+manifest_bytes,"text_pack_bytes":payload_bytes,"media_pack_bytes":media_bytes,"manifest_bytes":manifest_bytes,"unique_assets":assets,"asset_occurrences":asset_occurrences,"exact_restores":corpus.files.len(),"exact_native_zstd_restores":native,"encode_with_prepared_assets_seconds":encode_seconds,"restore_with_bytewise_oracle_seconds":start.elapsed().as_secs_f64(),"text_cache_decoded_bytes":cache.decoded,"media_cache_decoded_bytes":media_cache.decoded});
+    let report = serde_json::json!({"candidate":"reversible-media-trace-archive","scope":"Complete trace bytes and source metadata; no disposable SQLite index; asset preprocessing time excluded and reported separately; one exploratory trial","files":corpus.files.len(),"input_bytes":bytes,"archive_bytes":payload_bytes+media_bytes+manifest_bytes+pixel_bytes,"text_pack_bytes":payload_bytes,"media_pack_bytes":media_bytes,"pixel_object_bytes":pixel_bytes,"manifest_bytes":manifest_bytes,"unique_assets":assets,"asset_occurrences":asset_occurrences,"exact_restores":corpus.files.len(),"exact_native_zstd_restores":native,"encode_with_prepared_assets_seconds":encode_seconds,"restore_with_bytewise_oracle_seconds":start.elapsed().as_secs_f64(),"text_cache_decoded_bytes":cache.decoded,"media_cache_decoded_bytes":media_cache.decoded});
     fs::write(&args[6], serde_json::to_vec_pretty(&report)?)?;
     println!("{report}");
     Ok(())

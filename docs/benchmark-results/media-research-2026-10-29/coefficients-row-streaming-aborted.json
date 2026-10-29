@@ -1,0 +1,8 @@
+{
+  "candidate": "streaming-AC-dictionary-reader",
+  "outcome": "terminated during full restore after excessive pack-cache churn",
+  "exact_full_collection_restore": false,
+  "reason": "per-block traversal revisits more than 16 dictionary packs; replaced with batched per-image scatter decoding",
+  "encoded_coefficient_payload_bytes": 79720604,
+  "encoded_recipe_bytes": 38741586
+}

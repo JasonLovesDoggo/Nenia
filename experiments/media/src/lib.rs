@@ -1,6 +1,7 @@
 pub mod deflate_recipe;
 pub mod jpeg;
 pub mod png;
+pub mod shared_pixels;
 
 // Reuse the production lexical and pack codecs rather than copy them.
 #[path = "../../../src/pack.rs"]

@@ -228,7 +228,8 @@ fn main() -> Result<()> {
             );
             let references = take(&mut body, count * 4)?;
             let dc = body;
-            let mut blocks = Vec::with_capacity(count);
+            let mut blocks = vec![[0; 64]; count];
+            let mut jobs = std::collections::BTreeMap::<usize, Vec<(usize, usize)>>::new();
             for (ordinal, id) in references.chunks_exact(4).enumerate() {
                 let id = u32::from_le_bytes(id.try_into()?) as usize;
                 let pack = id / BLOCKS;
@@ -237,6 +238,9 @@ fn main() -> Result<()> {
                     pack < index.packs.len() && offset < index.packs[pack].1,
                     "coefficient reference bounds"
                 );
+                jobs.entry(pack).or_default().push((ordinal, offset));
+            }
+            for (pack, jobs) in jobs {
                 if let Some(position) = cache.iter().position(|(i, _)| *i == pack) {
                     let hit = cache.remove(position).unwrap();
                     cache.push_front(hit);
@@ -258,17 +262,19 @@ fn main() -> Result<()> {
                     cache.push_front((pack, raw));
                 }
                 let raw = &cache.front().unwrap().1;
-                let mut block = [0; 64];
-                block[0] = i16::from_le_bytes(dc[ordinal * 2..ordinal * 2 + 2].try_into()?);
-                for (k, value) in block[1..].iter_mut().enumerate() {
-                    let pos = if index.version == 2 {
-                        (k * index.packs[pack].1 + offset) * 2
-                    } else {
-                        offset * AC_BYTES + k * 2
-                    };
-                    *value = i16::from_le_bytes(raw[pos..pos + 2].try_into()?);
+                for (ordinal, offset) in jobs {
+                    let block = &mut blocks[ordinal];
+
+                    block[0] = i16::from_le_bytes(dc[ordinal * 2..ordinal * 2 + 2].try_into()?);
+                    for (k, value) in block[1..].iter_mut().enumerate() {
+                        let pos = if index.version == 2 {
+                            (k * index.packs[pack].1 + offset) * 2
+                        } else {
+                            offset * AC_BYTES + k * 2
+                        };
+                        *value = i16::from_le_bytes(raw[pos..pos + 2].try_into()?);
+                    }
                 }
-                blocks.push(block);
             }
             jpeg::encode(&Coefficients {
                 header,

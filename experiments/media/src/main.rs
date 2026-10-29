@@ -80,7 +80,7 @@ fn paeth(a: u8, b: u8, c: u8) -> u8 {
     }
 }
 fn unfilter(raw: &[u8], row: usize, bpp: usize) -> Result<Vec<u8>> {
-    ensure!(raw.len() % (row + 1) == 0, "invalid rows");
+    ensure!(raw.len().is_multiple_of(row + 1), "invalid rows");
     let height = raw.len() / (row + 1);
     let mut pixels = vec![0u8; row * height];
     for y in 0..height {

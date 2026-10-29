@@ -289,6 +289,16 @@ pub fn encode(data: &[u8]) -> Result<(Vec<u8>, BTreeMap<String, u64>)> {
             stats.insert(format!("preflate_error_{:?}", e.exit_code()), 1);
         }
     }
+    // A historical encoder is optional: accept only a complete byte proof.
+    // The generic recipe remains available for every other compressor.
+    for row in [0, (img.width * img.depth * img.channels).div_ceil(8) + 1] {
+        if fdeflate(&raw, row)? == img.idat {
+            correction = zip(&[])?;
+            correction_kind = if row == 0 { 2 } else { 3 };
+            stats.insert(format!("exact_fdeflate_profile_{correction_kind}"), 1);
+            break;
+        }
+    }
     let mut pixel = zip(&img.pixels)?;
     let mut pixel_kind = 0;
     if img.depth == 8 && matches!(img.channels, 3 | 4) {
@@ -384,6 +394,16 @@ pub fn decode(mut input: &[u8]) -> Result<Vec<u8>> {
         let compressed = match correction_kind {
             0 => deflate_recipe::decode(&raw, &correction)?,
             1 => preflate_rs::recreate_whole_deflate_stream(&raw, &correction)?,
+            2 | 3 => {
+                ensure!(correction.is_empty(), "unexpected native correction");
+                let row = if correction_kind == 2 {
+                    0
+                } else {
+                    (width * channels * depth).div_ceil(8) + 1
+                };
+                let zlib = fdeflate(&raw, row)?;
+                zlib[2..zlib.len() - 4].to_vec()
+            }
             _ => anyhow::bail!("correction codec"),
         };
         let mut idat = prefix.to_vec();
@@ -415,4 +435,12 @@ pub fn decode(mut input: &[u8]) -> Result<Vec<u8>> {
         "asset identity mismatch"
     );
     Ok(data)
+}
+
+fn fdeflate(raw: &[u8], row: usize) -> Result<Vec<u8>> {
+    let mut encoder = fdeflate::Compressor::new(Vec::new())?;
+    for bytes in raw.chunks(if row == 0 { raw.len().max(1) } else { row }) {
+        encoder.write_data(bytes)?;
+    }
+    Ok(encoder.finish()?)
 }

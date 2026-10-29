@@ -14,7 +14,17 @@ preflate-rs = "=0.7.6"
 flate2 = "1"
 webp = { version = "=0.3.1", default-features = false }
 serde = { version = "1", features = ["derive"] }
+lepton_jpeg = "=0.5.5"
+fdeflate = "=0.3.7"
 
 [[bin]]
 name = "reconstruct"
 path = "src/reconstruct.rs"
+
+[[bin]]
+name = "pixel-share"
+path = "src/pixel_share.rs"
+
+[[bin]]
+name = "jpeg-screen"
+path = "src/jpeg_screen.rs"

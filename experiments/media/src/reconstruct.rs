@@ -1,7 +1,6 @@
 //! Complete private asset containers, always verified against original bytes.
-mod deflate_recipe;
-mod png;
 use anyhow::{Result, ensure};
+use nenia_media_screen::png;
 use serde::Deserialize;
 use std::{collections::BTreeMap, fs, path::Path, time::Instant};
 

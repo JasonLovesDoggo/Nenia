@@ -1,0 +1,94 @@
+{
+  "diagnostic": "Decoded string values >=128 bytes; exact SHA-256 deduplication; not an archive size estimate",
+  "original_342": {
+    "stats": {
+      "decoded_bytes": 1736502437,
+      "records": 295553,
+      "unique_record_bytes": 1736501692,
+      "short_string_value_bytes": 98291600,
+      "files": 342
+    },
+    "groups": {
+      "text": {
+        "occurrences": 228592,
+        "bytes": 788631490,
+        "unique_values": 122323,
+        "unique_bytes": 447604836
+      },
+      "encrypted": {
+        "occurrences": 43182,
+        "bytes": 120430292,
+        "unique_values": 39330,
+        "unique_bytes": 115104368
+      },
+      "image": {
+        "occurrences": 1046,
+        "bytes": 478061264,
+        "unique_values": 835,
+        "unique_bytes": 399991173,
+        "binary_bytes": 358527326,
+        "unique_binary_bytes": 245005217,
+        "unique_png_bytes": 217415718,
+        "unique_jpeg_bytes": 27431427,
+        "unique_other_bytes": 158072
+      },
+      "base64": {
+        "occurrences": 221,
+        "bytes": 74406116,
+        "unique_values": 218,
+        "unique_bytes": 74134160,
+        "binary_bytes": 55804366,
+        "unique_binary_bytes": 55600405,
+        "unique_png_bytes": 2375846,
+        "unique_jpeg_bytes": 53224559
+      }
+    }
+  },
+  "combined": {
+    "stats": {
+      "decoded_bytes": 2023951494,
+      "records": 343410,
+      "unique_record_bytes": 2023674783,
+      "short_string_value_bytes": 129340435,
+      "files": 510,
+      "unparsed_record_bytes": 15879
+    },
+    "groups": {
+      "text": {
+        "occurrences": 284427,
+        "bytes": 908262045,
+        "unique_values": 145818,
+        "unique_bytes": 507054331
+      },
+      "encrypted": {
+        "occurrences": 43182,
+        "bytes": 120430292,
+        "unique_values": 39330,
+        "unique_bytes": 115104368
+      },
+      "image": {
+        "occurrences": 1046,
+        "bytes": 478061264,
+        "unique_values": 835,
+        "unique_bytes": 399991173,
+        "binary_bytes": 358527326,
+        "unique_binary_bytes": 245005217,
+        "unique_png_bytes": 217415718,
+        "unique_jpeg_bytes": 27431427,
+        "unique_other_bytes": 158072
+      },
+      "base64": {
+        "occurrences": 736,
+        "bytes": 181343536,
+        "unique_values": 480,
+        "unique_bytes": 123055344,
+        "binary_bytes": 136006925,
+        "unique_binary_bytes": 105266161,
+        "unique_png_bytes": 37242031,
+        "unique_jpeg_bytes": 68024130
+      }
+    }
+  },
+  "elapsed_seconds": 14.591520428890362,
+  "private_content_published": false
+}

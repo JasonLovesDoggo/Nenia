@@ -1,0 +1,53 @@
+{
+  "capture": "each source copied through its observed initial length; included frozen inputs retain their original bytes; no invented records or histories",
+  "captured_at": "2026-10-29T02:15:09.870440044+00:00",
+  "empty_files_skipped": 0,
+  "included_frozen_capture_times": [
+    "2026-10-28T06:28:03.723801754+00:00",
+    "2026-10-28T06:09:47.674873244+00:00"
+  ],
+  "private_source_details_published": false,
+  "providers": {
+    "additional_claude": {
+      "bytes": 287449057,
+      "files": 168,
+      "max_bytes": 36620397,
+      "median_bytes": 453445.0,
+      "min_bytes": 24459,
+      "p90_bytes": 4149234
+    },
+    "claude": {
+      "bytes": 2332703,
+      "files": 2,
+      "max_bytes": 2166911,
+      "median_bytes": 1166351.5,
+      "min_bytes": 165792,
+      "p90_bytes": 2166911
+    },
+    "codex": {
+      "bytes": 357091688,
+      "files": 72,
+      "max_bytes": 158856579,
+      "median_bytes": 1200197.0,
+      "min_bytes": 49856,
+      "p90_bytes": 6808804
+    },
+    "combined": {
+      "bytes": 1061449821,
+      "files": 510,
+      "max_bytes": 158856579,
+      "median_bytes": 390939.5,
+      "min_bytes": 9668,
+      "p90_bytes": 3403692
+    },
+    "mac_codex": {
+      "bytes": 414576373,
+      "files": 268,
+      "max_bytes": 99559577,
+      "median_bytes": 199868.0,
+      "min_bytes": 9668,
+      "p90_bytes": 1774123
+    }
+  },
+  "sources_growing_during_copy": 0
+}

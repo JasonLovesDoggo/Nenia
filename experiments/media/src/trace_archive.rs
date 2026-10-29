@@ -2,6 +2,7 @@
 //! only. Asset preparation is a separate measured phase, never hidden in timing.
 use anyhow::{Result, ensure};
 use nenia_media_screen::{
+    dictionary_pack,
     pack::{self, ChunkRef, Chunker, PackBuilder},
     png, shared_pixels,
     structure::{self, Recipe},
@@ -60,13 +61,16 @@ struct Store {
     typed: bool,
     unique_classes: [u64; 4],
     encoded_classes: [u64; 4],
+    dictionary: Option<dictionary_pack::Encoder>,
+    levels: [i32; 4],
 }
 impl Store {
-    fn new(root: PathBuf, typed: bool) -> Result<Self> {
+    fn new(root: PathBuf, typed: bool, dictionary: bool, deep: bool) -> Result<Self> {
         fs::create_dir_all(&root)?;
+        let levels = if deep { [19, 19, 9, 1] } else { [9; 4] };
         Ok(Self {
             root,
-            builders: std::array::from_fn(|_| PackBuilder::new(9)),
+            builders: std::array::from_fn(|i| PackBuilder::new(levels[i])),
             pending: std::array::from_fn(|_| Vec::new()),
             refs: Vec::new(),
             seen: HashMap::new(),
@@ -74,13 +78,24 @@ impl Store {
             typed,
             unique_classes: [0; 4],
             encoded_classes: [0; 4],
+            dictionary: dictionary.then(dictionary_pack::Encoder::default),
+            levels,
         })
     }
     fn flush_one(&mut self, kind: usize) -> Result<()> {
         if self.builders[kind].is_empty() {
             return Ok(());
         }
-        let p = std::mem::replace(&mut self.builders[kind], PackBuilder::new(9)).finish()?;
+        let p = std::mem::replace(
+            &mut self.builders[kind],
+            PackBuilder::new(self.levels[kind]),
+        )
+        .finish()?;
+        let p = if let Some(dictionary) = &mut self.dictionary {
+            dictionary.encode(&self.root, p, kind, self.levels[kind])?
+        } else {
+            p
+        };
         pack::atomic_write_immutable(&self.root.join(format!("{}.nz", p.id)), &p.bytes)?;
         for id in self.pending[kind].drain(..) {
             self.refs[id].pack = p.id.clone();
@@ -129,11 +144,12 @@ impl Cache {
             let p = self.entries.remove(i).unwrap();
             self.entries.push_front(p);
         } else {
-            let raw = pack::decode_pack(
+            let (raw, base_bytes) = dictionary_pack::decode(
+                &self.root,
                 &fs::read(self.root.join(format!("{}.nz", chunk.pack)))?,
                 &chunk.pack,
             )?;
-            self.decoded += raw.len() as u64;
+            self.decoded += (raw.len() + base_bytes) as u64;
             if self.entries.len() == 8 {
                 self.entries.pop_back();
             }
@@ -234,9 +250,16 @@ fn main() -> Result<()> {
         .map(|p| shared_pixels::Prepared::open(Path::new(p)))
         .transpose()?;
     let mut pixels = shared_pixels::Reader::new(root.join("pixels"));
-    let typed = args.get(9).is_some_and(|s| s == "typed");
-    let mut store = Store::new(root.join("packs"), typed)?;
-    let mut media = Store::new(root.join("media"), false)?;
+    let profile = args.get(9).map(String::as_str).unwrap_or("mixed");
+    ensure!(
+        ["mixed", "typed", "dictionary", "deep", "deep-dictionary"].contains(&profile),
+        "packing profile"
+    );
+    let typed = profile != "mixed";
+    let deep = profile.starts_with("deep");
+    let dictionary = profile.ends_with("dictionary");
+    let mut store = Store::new(root.join("packs"), typed, dictionary, deep)?;
+    let mut media = Store::new(root.join("media"), false, false, false)?;
     let mut saved = HashMap::<blake3::Hash, usize>::new();
     let mut global_assets = Vec::<(Asset, Vec<usize>)>::new();
     let mut records = Vec::new();
@@ -372,6 +395,8 @@ fn main() -> Result<()> {
     let media_bytes = media.bytes;
     let assets = global_assets.len();
     let encode_seconds = start.elapsed().as_secs_f64();
+    let levels = store.levels;
+    let dictionary_stats=store.dictionary.as_ref().map(|d|serde_json::json!({"selected":d.selected,"saved_bytes":d.saved,"attempts":d.attempts,"max_reference_depth":1}));
     let unique_classes = store.unique_classes;
     let encoded_classes = store.encoded_classes;
     drop(records);
@@ -490,7 +515,7 @@ fn main() -> Result<()> {
             eprintln!("{} exact trace restores", i + 1);
         }
     }
-    let report = serde_json::json!({"candidate":"reversible-media-trace-archive","scope":"Complete trace bytes and source metadata; no disposable SQLite index; asset preprocessing time excluded and reported separately; one exploratory trial","files":corpus.files.len(),"input_bytes":bytes,"archive_bytes":payload_bytes+media_bytes+manifest_bytes+pixel_bytes,"text_pack_bytes":payload_bytes,"media_pack_bytes":media_bytes,"pixel_object_bytes":pixel_bytes,"manifest_bytes":manifest_bytes,"unique_assets":assets,"asset_occurrences":asset_occurrences,"typed_packing":typed,"class_order":["literal","text","base64_standard","base64_url"],"unique_class_bytes":unique_classes,"encoded_class_bytes":encoded_classes,"exact_restores":corpus.files.len(),"exact_native_zstd_restores":native,"encode_with_prepared_assets_seconds":encode_seconds,"restore_with_bytewise_oracle_seconds":start.elapsed().as_secs_f64(),"text_cache_decoded_bytes":cache.decoded,"media_cache_decoded_bytes":media_cache.decoded});
+    let report = serde_json::json!({"candidate":"reversible-media-trace-archive","scope":"Complete trace bytes and source metadata; no disposable SQLite index; asset preprocessing time excluded and reported separately; one exploratory trial","files":corpus.files.len(),"input_bytes":bytes,"archive_bytes":payload_bytes+media_bytes+manifest_bytes+pixel_bytes,"text_pack_bytes":payload_bytes,"media_pack_bytes":media_bytes,"pixel_object_bytes":pixel_bytes,"manifest_bytes":manifest_bytes,"unique_assets":assets,"asset_occurrences":asset_occurrences,"typed_packing":typed,"packing_profile":profile,"compression_levels":levels,"dictionary_packs":dictionary_stats,"class_order":["literal","text","base64_standard","base64_url"],"unique_class_bytes":unique_classes,"encoded_class_bytes":encoded_classes,"exact_restores":corpus.files.len(),"exact_native_zstd_restores":native,"encode_with_prepared_assets_seconds":encode_seconds,"restore_with_bytewise_oracle_seconds":start.elapsed().as_secs_f64(),"text_cache_decoded_bytes":cache.decoded,"media_cache_decoded_bytes":media_cache.decoded});
     fs::write(&args[6], serde_json::to_vec_pretty(&report)?)?;
     println!("{report}");
     Ok(())

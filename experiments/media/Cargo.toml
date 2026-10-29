@@ -47,3 +47,11 @@ path = "src/jpeg_share.rs"
 [[bin]]
 name = "jxl-screen"
 path = "src/jxl_screen.rs"
+
+[[bin]]
+name = "sprites"
+path = "src/sprites.rs"
+
+[[bin]]
+name = "pixel-plan"
+path = "src/pixel_plan.rs"

@@ -11,15 +11,15 @@ use std::{
 };
 const LIMIT: usize = 128 * 1024 * 1024;
 #[derive(Serialize, Deserialize, Clone)]
-struct Packed {
-    width: usize,
-    height: usize,
-    channels: usize,
-    codec: u8,
-    hash: String,
+pub struct Packed {
+    pub width: usize,
+    pub height: usize,
+    pub channels: usize,
+    pub codec: u8,
+    pub hash: String,
 }
 #[derive(Serialize, Deserialize, Clone)]
-struct Part {
+pub struct Part {
     pack: usize,
     offset: usize,
     len: usize,
@@ -53,7 +53,7 @@ struct Frame {
     hash: String,
 }
 #[derive(Serialize, Deserialize)]
-enum Recipe {
+pub enum Recipe {
     Fragments {
         width: usize,
         height: usize,
@@ -70,18 +70,161 @@ enum Recipe {
         subtract: bool,
         hash: String,
     },
+    Sprites {
+        width: usize,
+        height: usize,
+        channels: usize,
+        hash: String,
+        tile: usize,
+        background: Vec<u32>,
+        packs: Vec<Packed>,
+        placements: Vec<[u32; 4]>,
+        #[serde(default)]
+        base: Option<usize>,
+    },
+}
+impl Recipe {
+    fn leaves(&self) -> Vec<&Packed> {
+        match self {
+            Self::Fragments { packs, .. } | Self::Sprites { packs, .. } => packs.iter().collect(),
+            Self::Delta { frame, base, .. } => std::iter::once(frame).chain(base.iter()).collect(),
+        }
+    }
+    fn leaves_mut(&mut self) -> Vec<&mut Packed> {
+        match self {
+            Self::Fragments { packs, .. } | Self::Sprites { packs, .. } => {
+                packs.iter_mut().collect()
+            }
+            Self::Delta { frame, base, .. } => {
+                std::iter::once(frame).chain(base.iter_mut()).collect()
+            }
+        }
+    }
 }
 pub struct Prepared {
     recipes: HashMap<usize, Vec<u8>>,
     objects: HashMap<String, (PathBuf, usize)>,
 }
+pub type Quote = (Vec<u8>, Vec<(String, u64)>);
 impl Prepared {
+    /// Prove equal decoded pixel arrays before unifying their encodings. This
+    /// also rewrites delta bases: choosing a smaller keyframe never requires a
+    /// second copy merely because its original dependent used another codec.
+    pub fn canonicalize(sources: &mut [Self]) -> Result<serde_json::Value> {
+        let mut locations = HashMap::new();
+        for source in sources.iter() {
+            locations.extend(source.objects.clone());
+        }
+        let mut reader = Reader::new(PathBuf::new());
+        reader.locations = Some(locations.clone());
+        let mut aliases = HashMap::<PixelKey, Packed>::new();
+        let mut identities = HashMap::<(blake3::Hash, usize, usize, usize), (u64, Packed)>::new();
+        let mut keys = HashMap::new();
+        for source in sources.iter() {
+            for token in source.recipes.values() {
+                let recipe: Recipe = serde_json::from_slice(&inflate(token, 4 * 1024 * 1024)?)?;
+                for pack in recipe.leaves() {
+                    let encoded = (
+                        pack.hash.clone(),
+                        pack.width,
+                        pack.height,
+                        pack.channels,
+                        pack.codec,
+                    );
+                    if keys.contains_key(&encoded) {
+                        continue;
+                    }
+                    let hash = blake3::hash(reader.packed(pack)?);
+                    let identity = (hash, pack.width, pack.height, pack.channels);
+                    let (path, offset) = &locations[&pack.hash];
+                    let bytes = fs::metadata(path)?.len() - *offset as u64;
+                    let winner = identities.entry(identity).or_insert((bytes, pack.clone()));
+                    if (bytes, &pack.hash) < (winner.0, &winner.1.hash) {
+                        *winner = (bytes, pack.clone());
+                    }
+                    keys.insert(encoded, identity);
+                }
+            }
+        }
+        let mut replaced = 0;
+        let mut possible_savings = 0;
+        for (encoded, identity) in keys {
+            let (cost, winner) = &identities[&identity];
+            if encoded.0 != winner.hash {
+                replaced += 1;
+                let (path, offset) = &locations[&encoded.0];
+                possible_savings += fs::metadata(path)?.len() - *offset as u64 - *cost;
+            }
+            aliases.insert(encoded, winner.clone());
+        }
+        for source in sources {
+            source.objects.extend(locations.clone());
+            for token in source.recipes.values_mut() {
+                let mut recipe: Recipe = serde_json::from_slice(&inflate(token, 4 * 1024 * 1024)?)?;
+                for p in recipe.leaves_mut() {
+                    *p = aliases[&(p.hash.clone(), p.width, p.height, p.channels, p.codec)].clone();
+                }
+                *token = zstd::stream::encode_all(serde_json::to_vec(&recipe)?.as_slice(), 9)?;
+            }
+        }
+        Ok(
+            serde_json::json!({"unique_pixel_arrays":identities.len(),"replaced_encodings":replaced,"potential_bytes_before_selection":possible_savings,"identity_proof":"BLAKE3 of exact decoded pixels plus dimensions and channels; complete selected images are separately byte-compared"}),
+        )
+    }
+    pub fn quote(&self, id: usize) -> Result<Option<Quote>> {
+        let Some(token) = self.recipes.get(&id) else {
+            return Ok(None);
+        };
+        let recipe: Recipe = serde_json::from_slice(&inflate(token, 4 * 1024 * 1024)?)?;
+        let packs = match &recipe {
+            Recipe::Fragments { packs, .. } | Recipe::Sprites { packs, .. } => {
+                packs.iter().collect::<Vec<_>>()
+            }
+            Recipe::Delta { frame, base, .. } => {
+                std::iter::once(frame).chain(base.iter()).collect()
+            }
+        };
+        let mut objects = std::collections::BTreeMap::new();
+        for p in packs {
+            crate::pack::validate_hash_id(&p.hash)?;
+            let (path, offset) = &self.objects[&p.hash];
+            let size = fs::metadata(path)?.len();
+            ensure!(*offset as u64 <= size, "pixel object offset");
+            objects.insert(p.hash.clone(), size - *offset as u64);
+        }
+        Ok(Some((token.clone(), objects.into_iter().collect())))
+    }
     pub fn open(root: &Path) -> Result<Self> {
         let mut this = Self {
             recipes: HashMap::new(),
             objects: HashMap::new(),
         };
-        if root.join("index.zstd").exists() {
+        if root.join("recipes").exists() {
+            for entry in fs::read_dir(root.join("recipes"))? {
+                let path = entry?.path();
+                if path.extension().is_none_or(|s| s != "pixel") {
+                    continue;
+                }
+                let id = path.file_stem().unwrap().to_str().unwrap().parse()?;
+                let token = fs::read(path)?;
+                let recipe: Recipe = serde_json::from_slice(&inflate(&token, 4 * 1024 * 1024)?)?;
+                let packs = match &recipe {
+                    Recipe::Fragments { packs, .. } | Recipe::Sprites { packs, .. } => {
+                        packs.iter().collect::<Vec<_>>()
+                    }
+                    Recipe::Delta { frame, base, .. } => {
+                        std::iter::once(frame).chain(base.iter()).collect()
+                    }
+                };
+                for pack in packs {
+                    this.objects.insert(
+                        pack.hash.clone(),
+                        (root.join("objects").join(&pack.hash), 0),
+                    );
+                }
+                this.recipes.insert(id, token);
+            }
+        } else if root.join("index.zstd").exists() {
             let index: RowIndex = serde_json::from_slice(&inflate(
                 &fs::read(root.join("index.zstd"))?,
                 64 * 1024 * 1024,
@@ -180,7 +323,9 @@ impl Prepared {
         };
         let recipe: Recipe = serde_json::from_slice(&inflate(token, 4 * 1024 * 1024)?)?;
         let packs = match &recipe {
-            Recipe::Fragments { packs, .. } => packs.iter().collect::<Vec<_>>(),
+            Recipe::Fragments { packs, .. } | Recipe::Sprites { packs, .. } => {
+                packs.iter().collect::<Vec<_>>()
+            }
             Recipe::Delta { frame, base, .. } => {
                 std::iter::once(frame).chain(base.iter()).collect()
             }
@@ -211,15 +356,20 @@ fn inflate(data: &[u8], limit: usize) -> Result<Vec<u8>> {
     ensure!(out.len() <= limit, "pixel decompression limit");
     Ok(out)
 }
+type PixelKey = (String, usize, usize, usize, u8);
 pub struct Reader {
     root: PathBuf,
-    cache: VecDeque<(String, Vec<u8>)>,
+    cache: VecDeque<(PixelKey, Vec<u8>)>,
+    small: HashMap<PixelKey, Vec<u8>>,
+    locations: Option<HashMap<String, (PathBuf, usize)>>,
 }
 impl Reader {
     pub fn new(root: PathBuf) -> Self {
         Self {
             root,
             cache: VecDeque::new(),
+            small: HashMap::new(),
+            locations: None,
         }
     }
     fn packed(&mut self, pack: &Packed) -> Result<&[u8]> {
@@ -232,7 +382,22 @@ impl Reader {
                 && pack.width * pack.height * pack.channels <= LIMIT,
             "pixel object layout"
         );
-        if let Some(pos) = self.cache.iter().position(|(hash, _)| hash == &pack.hash) {
+        let key = (
+            pack.hash.clone(),
+            pack.width,
+            pack.height,
+            pack.channels,
+            pack.codec,
+        );
+        if self.small.contains_key(&key) {
+            let bytes = &self.small[&key];
+            ensure!(
+                bytes.len() == pack.width * pack.height * pack.channels,
+                "cached sprite layout"
+            );
+            return Ok(bytes);
+        }
+        if let Some(pos) = self.cache.iter().position(|(stored, _)| stored == &key) {
             let hit = self.cache.remove(pos).unwrap();
             self.cache.push_front(hit);
         } else {
@@ -244,7 +409,16 @@ impl Reader {
                         .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
                 "pixel object name"
             );
-            let encoded = fs::read(self.root.join(&pack.hash))?;
+            let encoded = if let Some(locations) = &self.locations {
+                let (path, offset) = locations
+                    .get(&pack.hash)
+                    .ok_or_else(|| anyhow::anyhow!("missing pixel object"))?;
+                let bytes = fs::read(path)?;
+                ensure!(*offset <= bytes.len(), "pixel object prefix");
+                bytes[*offset..].to_vec()
+            } else {
+                fs::read(self.root.join(&pack.hash))?
+            };
             ensure!(
                 blake3::hash(&encoded).to_hex().as_str() == pack.hash,
                 "pixel object hash"
@@ -259,12 +433,19 @@ impl Reader {
                 raw.len() == pack.width * pack.height * pack.channels,
                 "pixel object size"
             );
+            if raw.len() <= 4096 {
+                if self.small.len() == 4096 {
+                    self.small.clear();
+                }
+                self.small.insert(key.clone(), raw);
+                return Ok(&self.small[&key]);
+            }
             while !self.cache.is_empty()
                 && self.cache.iter().map(|(_, v)| v.len()).sum::<usize>() + raw.len() > LIMIT
             {
                 self.cache.pop_back();
             }
-            self.cache.push_front((pack.hash.clone(), raw));
+            self.cache.push_front((key, raw));
         }
         let raw = &self.cache.front().unwrap().1;
         ensure!(
@@ -276,6 +457,87 @@ impl Reader {
     pub fn resolve(&mut self, token: &[u8]) -> Result<Vec<u8>> {
         let recipe: Recipe = serde_json::from_slice(&inflate(token, 4 * 1024 * 1024)?)?;
         let (pixels, hash) = match recipe {
+            Recipe::Sprites {
+                width,
+                height,
+                channels,
+                hash,
+                tile,
+                background,
+                packs,
+                placements,
+                base,
+            } => {
+                ensure!(
+                    width > 0
+                        && height > 0
+                        && width <= 16384
+                        && height <= 16384
+                        && (1..=4).contains(&channels)
+                        && width * height * channels <= LIMIT
+                        && tile == 32,
+                    "sprite image layout"
+                );
+                let cols = width.div_ceil(tile);
+                ensure!(
+                    ((base.is_none() && background.len() == cols * height.div_ceil(tile))
+                        || (base.is_some() && background.is_empty()))
+                        && placements.len() <= 100_000,
+                    "sprite recipe bounds"
+                );
+                let mut pixels = if let Some(id) = base {
+                    ensure!(
+                        id < packs.len()
+                            && packs[id].width == width
+                            && packs[id].height == height
+                            && packs[id].channels == channels,
+                        "sprite base layout"
+                    );
+                    self.packed(&packs[id])?.to_vec()
+                } else {
+                    vec![0; width * height * channels]
+                };
+                if base.is_none() {
+                    for y in 0..height {
+                        for x in 0..width {
+                            let color = background[y / tile * cols + x / tile].to_le_bytes();
+                            pixels[(y * width + x) * channels..(y * width + x + 1) * channels]
+                                .copy_from_slice(&color[..channels]);
+                        }
+                    }
+                }
+                let mut work = 0;
+                for [id, x, y, invert] in placements {
+                    let (id, x, y) = (id as usize, x as usize, y as usize);
+                    ensure!(id < packs.len() && invert <= 1, "sprite placement");
+                    let p = &packs[id];
+                    ensure!(
+                        x <= width
+                            && y <= height
+                            && p.width <= width - x
+                            && p.height <= height - y
+                            && (p.channels == channels || (p.channels == 3 && channels == 4)),
+                        "sprite geometry"
+                    );
+                    work += p.width * p.height * channels;
+                    ensure!(work <= pixels.len() * 4, "sprite work budget");
+                    let patch = self.packed(p)?;
+                    for yy in 0..p.height {
+                        for xx in 0..p.width {
+                            for c in 0..p.channels {
+                                let v = patch[(yy * p.width + xx) * p.channels + c];
+                                let out = &mut pixels[((y + yy) * width + x + xx) * channels + c];
+                                *out = if invert == 0 {
+                                    out.wrapping_add(v)
+                                } else {
+                                    out.wrapping_sub(v)
+                                };
+                            }
+                        }
+                    }
+                }
+                (pixels, hash)
+            }
             Recipe::Fragments {
                 width,
                 height,

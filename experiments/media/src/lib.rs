@@ -1,4 +1,5 @@
 pub mod deflate_recipe;
+pub mod dictionary_pack;
 pub mod jpeg;
 pub mod png;
 pub mod shared_pixels;

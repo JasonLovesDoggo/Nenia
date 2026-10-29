@@ -1,0 +1,26 @@
+{
+  "candidate": "joint-pixel-representation-planner",
+  "candidate_objects": 3808,
+  "candidate_sources": 5,
+  "cohort": "original",
+  "container_bytes": 87727724,
+  "coordinate_bytes": 100215323,
+  "coordinate_moves": 2,
+  "exact_pixel_restores": 482,
+  "greedy_bytes": 100215323,
+  "images": 482,
+  "optimality": "local search; no claim of a global optimum",
+  "planning_seconds": 0.160474515,
+  "restore_with_oracle_seconds": 41.904913678,
+  "scope": "Complete pixel-only archive; exact marginal object and recipe costs; PNG reconstruction excluded; one exploratory trial",
+  "selected_objects": 716,
+  "selection_by_source_order": [
+    21,
+    0,
+    314,
+    137,
+    10
+  ],
+  "shared_object_closings": 0,
+  "shared_object_openings": 32
+}

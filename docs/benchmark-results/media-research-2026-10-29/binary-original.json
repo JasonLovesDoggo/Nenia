@@ -1,0 +1,26 @@
+{
+  "Fernet-shaped envelope (heuristic)": [
+    39386,
+    86323578
+  ],
+  "JPEG signature": [
+    369,
+    81844462
+  ],
+  "PNG signature": [
+    506,
+    219994092
+  ],
+  "RIFF signature": [
+    1,
+    158072
+  ],
+  "UTF-8": [
+    70,
+    1394006
+  ],
+  "unidentified binary": [
+    551,
+    26949977
+  ]
+}

@@ -25,8 +25,8 @@ SQLite, unchanged legacy captures, decoded viewing and LRU eviction. A fixed Zst
 reconstruction digest is checked across platforms and input write fragmentation.
 
 Native Linux, macOS and Windows tests/release builds and Docker build/startup
-passed in [GitHub Actions](https://github.com/JasonLovesDoggo/Nenia/actions/runs/40814072274)
-at the selected code revision. This includes the historical-encoder compatibility
+passed in [GitHub Actions](https://github.com/JasonLovesDoggo/Nenia/actions/runs/40819568298)
+at published commit `9135bab` (archive code `0173121`). This includes the historical-encoder compatibility
 check and the Windows detached-worker handle-inheritance regression test.
 
 ## Actual data

@@ -3,7 +3,7 @@
 Nenia 0.2 adds portable cold image packs and a non-destructive `compact` command.
 The workspace passes 108 tests (one optional Moto test remains ignored). Native
 Linux, macOS, and Windows validation passed for the cold-reader implementation;
-all four jobs are green in [CI run 40844172568](https://github.com/JasonLovesDoggo/Nenia/actions/runs/40844172568).
+all four jobs are green in [CI run 40849279035](https://github.com/JasonLovesDoggo/Nenia/actions/runs/40849279035).
 The 1,291-file private corpus also passed HTTP transfer, independent catalog
 reconstruction, and complete source-byte comparison. See the
 [cold research record](research-media.md). The older validation record follows.

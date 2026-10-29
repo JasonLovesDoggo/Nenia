@@ -7,5 +7,9 @@
   "macos": "passed",
   "windows": "passed",
   "docker": "passed",
-  "retry": "macOS toolchain download DNS failure; retry succeeded"
+  "retry": "macOS toolchain download DNS failure; retry succeeded",
+  "final_commit": "5c89a423bacbf8180d29e975dc3860a194fa92b3",
+  "final_run": 40849279035,
+  "final_url": "https://github.com/JasonLovesDoggo/Nenia/actions/runs/40849279035",
+  "final_all_jobs": "passed"
 }

@@ -60,6 +60,7 @@ pub struct Chunker<R: Read> {
     reader: BufReader<R>,
     done: bool,
     fixed: bool,
+    small: bool,
 }
 
 impl<R: Read> Chunker<R> {
@@ -68,7 +69,16 @@ impl<R: Read> Chunker<R> {
             reader: BufReader::with_capacity(AVG_CHUNK_SIZE, reader),
             done: false,
             fixed: false,
+            small: false,
         }
+    }
+
+    /// Finer boundaries for extracted values, whose JSON wrappers no longer
+    /// interrupt matches. Archive readers do not depend on chunking policy.
+    pub fn new_small(reader: R) -> Self {
+        let mut chunker = Self::new(reader);
+        chunker.small = true;
+        chunker
     }
 
     /// Sealed compressed streams rarely share shifted plaintext chunks. Larger
@@ -99,6 +109,11 @@ impl<R: Read> Chunker<R> {
         }
         let mut chunk = Vec::with_capacity(AVG_CHUNK_SIZE);
         let mut fingerprint = 0_u64;
+        let (min, max, threshold) = if self.small {
+            (512, 16 * 1024, u64::MAX / 1536)
+        } else {
+            (MIN_CHUNK_SIZE, MAX_CHUNK_SIZE, CUT_THRESHOLD)
+        };
         loop {
             let available = match self.reader.fill_buf() {
                 Ok(bytes) => bytes,
@@ -119,7 +134,7 @@ impl<R: Read> Chunker<R> {
                 fingerprint = (fingerprint << 1).wrapping_add(GEAR[byte as usize]);
                 consumed += 1;
                 let len = chunk.len() + consumed;
-                if len == MAX_CHUNK_SIZE || (len >= MIN_CHUNK_SIZE && fingerprint < CUT_THRESHOLD) {
+                if len == max || (len >= min && fingerprint < threshold) {
                     boundary = true;
                     break;
                 }

@@ -1,4 +1,4 @@
-/target/
+**/target/
 /.nenia/
 /bench-output/
 /dist/

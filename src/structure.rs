@@ -202,7 +202,10 @@ impl<F: FnMut(&[u8]) -> Result<u32>> Builder<F> {
             }
             let token = &bytes[begin..i];
             if let Ok(value) = serde_json::from_slice::<String>(token) {
-                if serde_json::to_vec(&value)? == token {
+                let spelling = &token[1..token.len() - 1];
+                // Prove against our format's inverse, independent of future
+                // serde_json serializer choices. Most media needs no escaping.
+                if value.as_bytes() == spelling || expand(value.as_bytes(), 1)? == spelling {
                     self.content(&bytes[start..begin + 1], depth)?;
                     self.scan(value.as_bytes(), depth + 1)?;
                     self.literal(b"\"", depth)?;
@@ -289,11 +292,15 @@ pub fn validate_flags(flags: u32) -> Result<u8> {
 /// The maximum expansion is bounded by one chunk and three JSON escape layers.
 pub fn expand(bytes: &[u8], flags: u32) -> Result<Vec<u8>> {
     let flags = validate_flags(flags)?;
-    let mut out = if flags & BASE64 != 0 {
-        engine(flags).encode(bytes).into_bytes()
-    } else {
-        bytes.to_vec()
-    };
+    if flags & BASE64 != 0 {
+        // Both base64 alphabets and '=' contain no JSON escape characters, at
+        // any nesting depth. Avoid copying every image/ciphertext once per layer.
+        return Ok(engine(flags).encode(bytes).into_bytes());
+    }
+    if flags & 7 == 0 || !bytes.iter().any(|c| *c < 32 || matches!(c, b'"' | b'\\')) {
+        return Ok(bytes.to_vec());
+    }
+    let mut out = bytes.to_vec();
     for _ in 0..flags & 7 {
         let mut escaped = Vec::with_capacity(out.len());
         for c in out {
@@ -345,6 +352,14 @@ mod tests {
             blake3::hash(input).to_hex().to_string()
         );
     }
+    #[test]
+    fn canonical_spelling_covers_every_byte_character() {
+        for code in 0..=255u8 {
+            let text = char::from(code).to_string().repeat(300);
+            roundtrip(serde_json::to_string(&text).unwrap().as_bytes());
+        }
+    }
+
     #[test]
     fn lexical_roundtrips_preserve_spelling_and_binary() {
         for raw in [

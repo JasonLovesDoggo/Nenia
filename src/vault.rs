@@ -1325,7 +1325,7 @@ struct PackCache {
 impl PackCache {
     fn get(&mut self, vault: &Vault, id: &str) -> Result<&[u8]> {
         if let Some(index) = self.entries.iter().position(|(key, _)| key == id) {
-            self.entries.swap(0, index);
+            self.entries[..=index].rotate_right(1);
         } else {
             if self.entries.len() == 8 {
                 self.entries.pop();
@@ -1412,5 +1412,34 @@ impl Read for SnapshotReader<'_> {
         out[..n].copy_from_slice(&self.current[self.position..self.position + n]);
         self.position += n;
         Ok(n)
+    }
+}
+
+#[cfg(test)]
+mod cache_tests {
+    use super::*;
+    #[test]
+    fn a_cache_hit_keeps_the_previous_most_recent_pack_hot() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let mut vault = Vault::init(directory.path(), 1)?;
+        let mut ids = Vec::new();
+        for byte in 0..9u8 {
+            let mut pack = PackBuilder::new(1);
+            pack.add(&[byte])?;
+            let pack = pack.finish()?;
+            vault.receive_object("packs", &pack.id, &pack.bytes)?;
+            ids.push(pack.id);
+        }
+        let mut cache = PackCache::default();
+        for id in &ids[..8] {
+            cache.get(&vault, id)?;
+        }
+        cache.get(&vault, &ids[0])?;
+        // The former front must remain cached after a hit on the old tail and
+        // another insertion. A front/tail swap incorrectly evicts this pack.
+        fs::remove_file(vault.pack_path(&ids[7])?)?;
+        cache.get(&vault, &ids[8])?;
+        assert_eq!(cache.get(&vault, &ids[7])?, &[7]);
+        Ok(())
     }
 }

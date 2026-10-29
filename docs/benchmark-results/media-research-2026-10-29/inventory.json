@@ -1,0 +1,26 @@
+{
+  "inventory": "Canonical base64 PNG/JPEG signatures; not an archive estimate",
+  "files": 1291,
+  "original": {
+    "png_occurrences": 720,
+    "png_bytes": 277711919,
+    "png_unique": 500,
+    "png_unique_bytes": 219941390,
+    "jpeg_occurrences": 597,
+    "jpeg_bytes": 138474827,
+    "jpeg_unique": 366,
+    "jpeg_unique_bytes": 81751328
+  },
+  "complete": {
+    "png_occurrences": 2073,
+    "png_bytes": 479345377,
+    "png_unique": 1039,
+    "png_unique_bytes": 303333969,
+    "jpeg_occurrences": 1096,
+    "jpeg_bytes": 262510089,
+    "jpeg_unique": 736,
+    "jpeg_unique_bytes": 174779424
+  },
+  "seconds": 14.73464371706359,
+  "private_content_published": false
+}

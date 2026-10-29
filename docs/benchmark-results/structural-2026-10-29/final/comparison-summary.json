@@ -1,0 +1,234 @@
+{
+  "original/v1": {
+    "trials": 3,
+    "files": 342,
+    "input_bytes": 774000764,
+    "exact_measured_restores": 1026,
+    "archive_bytes_min_median_max": [
+      490613978,
+      490614709,
+      490615054
+    ],
+    "payload_bytes_min_median_max": [
+      489921134,
+      489921134,
+      489921134
+    ],
+    "manifest_bytes_min_median_max": [
+      692844,
+      693575,
+      693920
+    ],
+    "catalog_bytes_min_median_max": [
+      2367488,
+      2375680,
+      2379776
+    ],
+    "total_bytes_min_median_max": [
+      492982294,
+      492990831,
+      492993851
+    ],
+    "elapsed_seconds_min_median_max": [
+      6.464125398,
+      6.578025628,
+      6.701516882
+    ],
+    "unchanged_capture_seconds_min_median_max": [
+      2.739581218,
+      2.808551576,
+      2.822150929
+    ],
+    "metadata_poll_seconds_min_median_max": [
+      0.00694809,
+      0.007038324,
+      0.007081067
+    ],
+    "whole_process_peak_rss_kib_max": 62980,
+    "unchanged_archive_growth_bytes": [
+      0,
+      0,
+      0
+    ]
+  },
+  "original/v2": {
+    "trials": 3,
+    "files": 342,
+    "input_bytes": 774000764,
+    "exact_measured_restores": 1026,
+    "archive_bytes_min_median_max": [
+      410635823,
+      410636397,
+      410636404
+    ],
+    "payload_bytes_min_median_max": [
+      406758629,
+      406758629,
+      406758629
+    ],
+    "manifest_bytes_min_median_max": [
+      3877194,
+      3877768,
+      3877775
+    ],
+    "catalog_bytes_min_median_max": [
+      21069824,
+      21086208,
+      21200896
+    ],
+    "total_bytes_min_median_max": [
+      431706325,
+      431722702,
+      431836816
+    ],
+    "elapsed_seconds_min_median_max": [
+      25.835119475,
+      26.139928326,
+      26.226349645
+    ],
+    "restore_seconds_min_median_max": [
+      23.569535231,
+      24.043738797,
+      24.206242411
+    ],
+    "unchanged_capture_seconds_min_median_max": [
+      0.302416438,
+      0.302684769,
+      0.303614426
+    ],
+    "metadata_poll_seconds_min_median_max": [
+      0.027573896,
+      0.027704499,
+      0.028021508
+    ],
+    "whole_process_peak_rss_kib_max": 157472,
+    "unchanged_archive_growth_bytes": [
+      0,
+      0,
+      0
+    ],
+    "structural_snapshots": 342,
+    "native_reconstructed": 251,
+    "native_opaque": 0
+  },
+  "complete/v1": {
+    "trials": 3,
+    "files": 1291,
+    "input_bytes": 2098579235,
+    "exact_measured_restores": 3873,
+    "archive_bytes_min_median_max": [
+      850989056,
+      850990974,
+      850991307
+    ],
+    "payload_bytes_min_median_max": [
+      848494401,
+      848494401,
+      848494401
+    ],
+    "manifest_bytes_min_median_max": [
+      2494655,
+      2496573,
+      2496906
+    ],
+    "catalog_bytes_min_median_max": [
+      7958528,
+      7962624,
+      7970816
+    ],
+    "total_bytes_min_median_max": [
+      858947681,
+      858954028,
+      858961887
+    ],
+    "elapsed_seconds_min_median_max": [
+      18.964992686,
+      19.088825882,
+      19.829313918
+    ],
+    "unchanged_capture_seconds_min_median_max": [
+      7.767631919,
+      7.7689177659999995,
+      7.77945507
+    ],
+    "metadata_poll_seconds_min_median_max": [
+      0.027496721,
+      0.027509781,
+      0.027699749
+    ],
+    "whole_process_peak_rss_kib_max": 66064,
+    "unchanged_archive_growth_bytes": [
+      0,
+      0,
+      0
+    ]
+  },
+  "complete/v2": {
+    "trials": 3,
+    "files": 1291,
+    "input_bytes": 2098579235,
+    "exact_measured_restores": 3873,
+    "archive_bytes_min_median_max": [
+      706790687,
+      706792806,
+      706794022
+    ],
+    "payload_bytes_min_median_max": [
+      696558137,
+      696558137,
+      696558137
+    ],
+    "manifest_bytes_min_median_max": [
+      10232550,
+      10234669,
+      10235885
+    ],
+    "catalog_bytes_min_median_max": [
+      49688576,
+      49713152,
+      49823744
+    ],
+    "total_bytes_min_median_max": [
+      756479360,
+      756506055,
+      756617863
+    ],
+    "elapsed_seconds_min_median_max": [
+      53.585167871,
+      53.606794573,
+      54.012388719
+    ],
+    "restore_seconds_min_median_max": [
+      79.460318412,
+      80.780653747,
+      81.270549879
+    ],
+    "unchanged_capture_seconds_min_median_max": [
+      0.77036886,
+      0.775901685,
+      0.783068239
+    ],
+    "metadata_poll_seconds_min_median_max": [
+      0.077161553,
+      0.077423946,
+      0.078053217
+    ],
+    "whole_process_peak_rss_kib_max": 991412,
+    "unchanged_archive_growth_bytes": [
+      0,
+      0,
+      0
+    ],
+    "structural_snapshots": 1289,
+    "native_reconstructed": 638,
+    "native_opaque": 0
+  },
+  "original/comparison": {
+    "archive_bytes_saved": 79978312,
+    "archive_reduction_percent": 16.30165393186367
+  },
+  "complete/comparison": {
+    "archive_bytes_saved": 144198168,
+    "archive_reduction_percent": 16.94473530338525
+  }
+}

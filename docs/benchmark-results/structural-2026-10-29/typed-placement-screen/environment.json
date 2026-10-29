@@ -1,0 +1,70 @@
+{
+  "arch": "x86_64",
+  "chunk_average_bytes": 32768,
+  "chunk_max_bytes": 262144,
+  "chunk_min_bytes": 8192,
+  "container": "all",
+  "executable_blake3": "5d43d072b47bce0c703dac14362a706d2ec55d5f2ce3f74ce461319cca719b96",
+  "index_enabled": false,
+  "level": 9,
+  "limitations": [
+    "shared development host, power/thermal state uncontrolled",
+    "file lengths, not filesystem allocated blocks or cloud billing",
+    "short batch throughput, not sustained service capacity",
+    "baseline recovery mapping published at final completion, Nenia per ingestion transaction",
+    "all source mappings, filenames, content hashes, credentials and objects remain outside the repository"
+  ],
+  "logical_cpus": 12,
+  "observed_growth_enabled": false,
+  "only_candidate": "nenia",
+  "only_cohort": "combined",
+  "os": "linux",
+  "pack_raw_max_bytes": 8388608,
+  "private_trace_details_in_report": false,
+  "recovery_enabled": false,
+  "rustc": "rustc 1.88.0 (6b00bc388 2025-06-23)\nbinary: rustc\ncommit-hash: 6b00bc3880198600130e1cf62b8f8a93494488cc\ncommit-date: 2025-06-23\nhost: x86_64-unknown-linux-gnu\nrelease: 1.88.0\nLLVM version: 20.1.5",
+  "source_code_blake3": [
+    [
+      "Cargo.toml",
+      "3ab209aaf92bc042e9c6326ae8094a1853312e86517a6a1e0029a43a9a902106"
+    ],
+    [
+      "Cargo.lock",
+      "06ae02f3f4107381d36555e405b84b7fa29ef81b98607ef00eda214c2e7b883c"
+    ],
+    [
+      "src/pack.rs",
+      "0ef023fdad4d65d24de6a50145c5242ed0a9c72fb06183964157ad1f8fb8f5e6"
+    ],
+    [
+      "src/structure.rs",
+      "cdc4bea3acb07d527b43ecf92bc1290fdc334abcd464b2d739527d0a1c1eed68"
+    ],
+    [
+      "src/native.rs",
+      "efa46757945511131489d43a23d96a3cfe9646bd0f97105938f5350e8050f18f"
+    ],
+    [
+      "src/vault.rs",
+      "11faadaaca4e00b63e549aa51541190d01f70f3fc3005232349e479101e0c212"
+    ],
+    [
+      "src/adapters.rs",
+      "728b76eb818ed8a7cc79e45fcb782c5cdf950db648c9f9eceb1a980d1c44ac04"
+    ],
+    [
+      "src/remote.rs",
+      "20a2572e6127182af40b3b148810f87ba0123b3e6bb1204a1a6bfd1f85ab9846"
+    ],
+    [
+      "examples/real_benchmark.rs",
+      "d84838742ad8374df0c6b0311b742c5e5dac55b9eb3b21f86cb2691e8e5d061e"
+    ]
+  ],
+  "source_commit": "af912a8acb5966703f0f2101b5073c15594aad0c",
+  "started_at": "2026-10-29T04:14:51.499980827+00:00",
+  "state": "fresh archives, frozen actual files, warm source cache; no cold-storage claim",
+  "trials": 1,
+  "window_log": 23,
+  "zstd_version": "1.5.7"
+}

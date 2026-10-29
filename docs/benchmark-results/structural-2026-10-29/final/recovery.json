@@ -1,0 +1,11 @@
+{
+  "deleted_catalog_exact_restores": 1291,
+  "errors": 0,
+  "http_pull_transferred_bytes": 706792806,
+  "http_pull_transferred_objects": 1531,
+  "http_push_transferred_bytes": 706792806,
+  "http_push_transferred_objects": 1531,
+  "http_recovery_exact_restores": 1291,
+  "rebuilt_snapshots": 1291,
+  "transport": "authenticated HTTP over loopback; correctness test, not WAN performance"
+}

@@ -1,0 +1,20 @@
+{
+  "cpu": {
+    "Architecture": "x86_64",
+    "CPU(s)": "12",
+    "Model name": "AMD Ryzen 5 7640U w/ Radeon 760M Graphics",
+    "Thread(s) per core": "2",
+    "Core(s) per socket": "6",
+    "Socket(s)": "1",
+    "CPU max MHz": "4971.0000",
+    "CPU min MHz": "400.0000"
+  },
+  "kernel": "6.12.111+deb13-amd64",
+  "memory_total_kib": 23898112,
+  "filesystem": "ext2/ext3",
+  "storage_models": [
+    "CT1000P5PSSD8"
+  ],
+  "conditions": "Shared developer workstation; warm source cache; CPU power/thermal state uncontrolled. Final candidates run sequentially. RSS covers the entire benchmark process, including correctness/recovery, not just ingestion.",
+  "cpu_governor": "powersave"
+}

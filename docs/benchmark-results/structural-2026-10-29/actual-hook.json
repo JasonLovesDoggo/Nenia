@@ -1,0 +1,12 @@
+{
+  "actual_trace_bytes": 2166911,
+  "callback_milliseconds": 6.747436011210084,
+  "detached_capture_completed": true,
+  "snapshot_format": 2,
+  "exact_restore": true,
+  "source_unchanged": true,
+  "global_settings_unchanged": true,
+  "remote_configured": false,
+  "method": "Installed exec-form handler in an isolated Claude configuration, then official Stop envelope using the real session_id and frozen actual transcript; no model request",
+  "private_content_published": false
+}

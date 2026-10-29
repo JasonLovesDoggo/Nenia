@@ -1,0 +1,224 @@
+diff --git a/examples/structure_probe.rs b/examples/structure_probe.rs
+index 5a8f568..96ac913 100644
+--- a/examples/structure_probe.rs
++++ b/examples/structure_probe.rs
+@@ -171,7 +171,7 @@ fn main() -> Result<()> {
+         let mut recipe = structure::encode_with_policy(
+             &mut reader,
+             args.get(7).is_some_and(|s| s == "small"),
+-            |bytes| {
++            |bytes, _class| {
+                 let global = store.put(bytes)?;
+                 Ok(*local.entry(global).or_insert_with(|| {
+                     ids.push(global);
+diff --git a/src/structure.rs b/src/structure.rs
+index ef2fd7d..ccd1538 100644
+--- a/src/structure.rs
++++ b/src/structure.rs
+@@ -17,6 +17,14 @@ const BASE64: u8 = 8;
+ const URL: u8 = 16;
+ const NO_PAD: u8 = 32;
+ 
++/// Writer-only placement hint. No reader or manifest depends on these classes.
++#[derive(Clone, Copy)]
++pub enum Class {
++    Text,
++    Binary,
++    UrlBinary,
++}
++
+ /// [chunk table index, slice offset, slice length, reversible transform flags].
+ pub type Operation = [u32; 4];
+ 
+@@ -37,7 +45,7 @@ struct Builder<F> {
+     literal_ops: Vec<usize>,
+ }
+ 
+-impl<F: FnMut(&[u8]) -> Result<u32>> Builder<F> {
++impl<F: FnMut(&[u8], Class) -> Result<u32>> Builder<F> {
+     fn op(&mut self, op: Operation) -> Result<()> {
+         ensure!(
+             self.operations.len() < MAX_OPERATIONS,
+@@ -49,7 +57,7 @@ impl<F: FnMut(&[u8]) -> Result<u32>> Builder<F> {
+ 
+     fn flush_literals(&mut self) -> Result<()> {
+         if !self.literals.is_empty() {
+-            let index = (self.store)(&self.literals)?;
++            let index = (self.store)(&self.literals, Class::Text)?;
+             for op in self.literal_ops.drain(..) {
+                 self.operations[op][0] = index;
+             }
+@@ -108,7 +116,14 @@ impl<F: FnMut(&[u8]) -> Result<u32>> Builder<F> {
+                 let remaining = part.len() - offset;
+                 let len = if last { remaining } else { remaining / 3 * 3 };
+                 if len > 0 {
+-                    let index = (self.store)(&part)?;
++                    let index = (self.store)(
++                        &part,
++                        if flags & URL != 0 {
++                            Class::UrlBinary
++                        } else {
++                            Class::Binary
++                        },
++                    )?;
+                     self.op([index, offset as u32, len as u32, flags as u32])?;
+                 }
+                 carry.extend_from_slice(&part[offset + len..]);
+@@ -122,7 +137,7 @@ impl<F: FnMut(&[u8]) -> Result<u32>> Builder<F> {
+             };
+             for part in chunker {
+                 let part = part?;
+-                let index = (self.store)(&part)?;
++                let index = (self.store)(&part, Class::Text)?;
+                 self.op([index, 0, part.len() as u32, flags as u32])?;
+             }
+         }
+@@ -231,14 +246,14 @@ fn engine(flags: u8) -> &'static b64::GeneralPurpose {
+ }
+ 
+ /// No whole-file buffer. Oversized records are preserved in bounded raw slices.
+-pub fn encode(reader: impl Read, store: impl FnMut(&[u8]) -> Result<u32>) -> Result<Recipe> {
++pub fn encode(reader: impl Read, store: impl FnMut(&[u8], Class) -> Result<u32>) -> Result<Recipe> {
+     encode_with_policy(reader, false, store)
+ }
+ 
+ pub fn encode_with_policy(
+     reader: impl Read,
+     small: bool,
+-    store: impl FnMut(&[u8]) -> Result<u32>,
++    store: impl FnMut(&[u8], Class) -> Result<u32>,
+ ) -> Result<Recipe> {
+     let mut reader = BufReader::new(reader);
+     let mut builder = Builder {
+@@ -336,7 +351,7 @@ mod tests {
+     use super::*;
+     fn roundtrip(input: &[u8]) {
+         let mut chunks = Vec::new();
+-        let recipe = encode(input, |bytes| {
++        let recipe = encode(input, |bytes, _class| {
+             chunks.push(bytes.to_vec());
+             Ok(chunks.len() as u32 - 1)
+         })
+diff --git a/src/vault.rs b/src/vault.rs
+index 2d756cb..1d759b0 100644
+--- a/src/vault.rs
++++ b/src/vault.rs
+@@ -2,7 +2,7 @@ use crate::adapters::{self, Candidate, Metadata, Source};
+ use crate::pack::{self, ChunkRef, Chunker, PackBuilder};
+ use crate::{
+     native,
+-    structure::{self, Recipe},
++    structure::{self, Class, Recipe},
+ };
+ use anyhow::{bail, ensure, Context, Result};
+ use chrono::Utc;
+@@ -629,8 +629,10 @@ impl Vault {
+         source_override: Source,
+         report: &mut IngestReport,
+     ) -> Result<()> {
+-        let mut builder = PackBuilder::new(self.config.compression_level);
+-        let mut pending_chunks: HashMap<String, (u64, u32)> = HashMap::new();
++        let mut builders: [PackBuilder; 3] =
++            std::array::from_fn(|_| PackBuilder::new(self.config.compression_level));
++        let mut pending_chunks: [HashMap<String, (u64, u32)>; 3] =
++            std::array::from_fn(|_| HashMap::new());
+         let mut checked_packs = std::collections::HashSet::new();
+         let mut pending = Vec::new();
+         let mut pending_references = 0;
+@@ -704,10 +706,11 @@ impl Vault {
+                     None => (Box::new(file.take(initial.len())), None),
+                 };
+                 let mut local = HashMap::new();
+-                let mut recipe = structure::encode(reader, |chunk| {
++                let mut recipe = structure::encode(reader, |chunk, class| {
+                     let hash = self.stage_chunk(
+                         chunk,
+-                        &mut builder,
++                        class,
++                        &mut builders,
+                         &mut pending_chunks,
+                         &mut checked_packs,
+                         report,
+@@ -749,7 +752,12 @@ impl Vault {
+                     size += chunk.len() as u64;
+                     hashes.push(self.stage_chunk(
+                         &chunk,
+-                        &mut builder,
++                        if compressed {
++                            Class::Binary
++                        } else {
++                            Class::Text
++                        },
++                        &mut builders,
+                         &mut pending_chunks,
+                         &mut checked_packs,
+                         report,
+@@ -786,12 +794,12 @@ impl Vault {
+                 hashes,
+             ));
+             if pending_references >= 65536 {
+-                self.flush_pack(&mut builder, &mut pending_chunks, report)?;
++                self.flush_packs(&mut builders, &mut pending_chunks, report)?;
+                 self.publish_snapshots(&mut pending, report)?;
+                 pending_references = 0;
+             }
+         }
+-        self.flush_pack(&mut builder, &mut pending_chunks, report)?;
++        self.flush_packs(&mut builders, &mut pending_chunks, report)?;
+         self.publish_snapshots(&mut pending, report)
+     }
+ 
+@@ -808,13 +816,14 @@ impl Vault {
+     fn stage_chunk(
+         &self,
+         chunk: &[u8],
+-        builder: &mut PackBuilder,
+-        pending: &mut HashMap<String, (u64, u32)>,
++        class: Class,
++        builders: &mut [PackBuilder; 3],
++        pending: &mut [HashMap<String, (u64, u32)>; 3],
+         checked: &mut std::collections::HashSet<String>,
+         report: &mut IngestReport,
+     ) -> Result<String> {
+         let hash = blake3::hash(chunk).to_hex().to_string();
+-        if pending.contains_key(&hash) {
++        if pending.iter().any(|bucket| bucket.contains_key(&hash)) {
+             return Ok(hash);
+         }
+         let old_pack: Option<String> = self
+@@ -827,11 +836,12 @@ impl Vault {
+                 ensure!(self.pack_path(&id)?.is_file(), "catalog references missing pack {id}; restore missing objects with `nenia pull` before capturing more snapshots");
+             }
+         } else {
+-            if !builder.can_fit(chunk.len()) {
+-                self.flush_pack(builder, pending, report)?;
++            let slot = class as usize;
++            if !builders[slot].can_fit(chunk.len()) {
++                self.flush_pack(&mut builders[slot], &mut pending[slot], report)?;
+             }
+-            let offset = builder.add(chunk)?;
+-            pending.insert(hash.clone(), (offset, chunk.len() as u32));
++            let offset = builders[slot].add(chunk)?;
++            pending[slot].insert(hash.clone(), (offset, chunk.len() as u32));
+             report.new_chunk_bytes += chunk.len() as u64;
+         }
+         Ok(hash)
+@@ -866,6 +876,18 @@ impl Vault {
+         Ok(())
+     }
+ 
++    fn flush_packs(
++        &self,
++        builders: &mut [PackBuilder; 3],
++        pending: &mut [HashMap<String, (u64, u32)>; 3],
++        report: &mut IngestReport,
++    ) -> Result<()> {
++        for (builder, chunks) in builders.iter_mut().zip(pending.iter_mut()) {
++            self.flush_pack(builder, chunks, report)?;
++        }
++        Ok(())
++    }
++
+     fn flush_pack(
+         &self,
+         builder: &mut PackBuilder,

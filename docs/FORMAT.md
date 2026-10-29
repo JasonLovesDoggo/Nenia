@@ -167,7 +167,7 @@ captures use version 2 for raw inputs of at least 4 KiB and proven native contai
 small raw files retain version 1.
 
 `nenia cat SNAPSHOT --decoded` exposes JSONL directly, including from legacy native
-containers (a legacy decoded view is limited to 2 GiB output). `cat` without this flag and `restore` always reproduce original bytes.
+containers (a legacy decoded view aborts after exceeding the 2 GiB budget). `cat` without this flag and `restore` always reproduce original bytes.
 
 ## Publication and recovery
 

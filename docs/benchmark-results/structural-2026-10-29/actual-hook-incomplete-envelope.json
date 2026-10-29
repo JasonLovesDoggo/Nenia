@@ -1,0 +1,6 @@
+{
+  "status": "invalid_test_envelope",
+  "reason": "Manual smoke invocation omitted required session_id; callback correctly ignored it without creating a vault",
+  "capture_exercised": false,
+  "private_content_published": false
+}

@@ -16,6 +16,9 @@ traces. Use `nenia backup --full-scan` periodically if another tool might rewrit
 files while preserving their timestamps. Neither command deletes source files
 or removes local archive objects after upload.
 
+Upgrade the server before clients when moving to archive format 2. Existing
+format-1 objects remain readable and are not automatically rewritten.
+
 ## Self-hosted server
 
 The repository builds its own container from the official
@@ -100,7 +103,7 @@ that account's home instead of your agent sessions.
 ## Validation status
 
 Native Linux, macOS, and Windows tests and release builds, plus the Docker build
-and server startup probe, passed in [GitHub Actions](https://github.com/JasonLovesDoggo/Nenia/actions/runs/40778337469).
+and server startup probe, passed in [GitHub Actions](https://github.com/JasonLovesDoggo/Nenia/actions/runs/40814072274).
 The workflow produces native binary artifacts; it does not publish container
 images or releases. Tests cover offline retries, fresh-device recovery,
 corrupt-catalog recovery, source reversions, event hooks, and wrapper exit status.

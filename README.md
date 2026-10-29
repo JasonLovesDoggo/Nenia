@@ -35,6 +35,7 @@ For other agents, use `nenia run -- codex`, or back up an export with
 nenia pull
 nenia list
 nenia restore <snapshot> --output session.jsonl
+nenia cat <snapshot> --decoded
 ```
 
 [Hooks](docs/hooks.md) · [S3](docs/remote.md) ·

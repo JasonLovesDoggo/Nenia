@@ -1,0 +1,18 @@
+{
+  "checksum_validation": {
+    "matched": 939
+  },
+  "source_file_suffix_counts": {
+    "": 1,
+    ".md": 1,
+    ".json": 1,
+    ".jsonl": 562,
+    ".jsonl.zst": 387
+  },
+  "private_paths_or_hashes_published": false,
+  "captured_files": 1291,
+  "additional_trace_files": 949,
+  "listed_uploaded_traces_verified": 939,
+  "additional_unlisted_jsonl_exports": 10,
+  "export_manifest_excluded_by_discovery": true
+}

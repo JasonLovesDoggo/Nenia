@@ -1,98 +1,96 @@
-# What the actual Codex files taught us
+# Compression beneath the JSON wrappers
 
-The supplied Mac snapshot contains 268 real sessions: 251 native `.jsonl.zst`
-files and 17 raw `.jsonl` files. All supplied checksums passed. Source files were
-kept private and unchanged; only aggregate measurements are published.
+Whole-record deduplication scarcely helped the original 342-file corpus: only
+745 bytes of complete records repeated. Timestamps and envelopes change while
+large values repeat. The design now works below those envelopes.
 
-## Native format
+The original files occupy 774,000,764 bytes on disk and 1,736,502,437 bytes after
+native Zstd decoding. The completed upload expands the measured corpus to 1,291
+files / 2,098,579,235 native bytes. All inputs are the user's actual traces.
 
-- Native files occupy 414,576,373 bytes; decoded JSONL occupies 1,377,078,046 bytes.
-- All 251 compressed files declare their decoded sizes, use windows no larger
-  than 2 MiB, and have no external dictionary or frame checksum.
-- There are 225,017 JSONL records. About 355.8 MB of decoded string bytes are image
-  data URIs. Images help explain why stronger text compression has limited gains.
-- Long string values contain 314.5 MB of exact repetition. This is a structural
-  observation across JSON fields, not a promise of that much additional savings.
-- One file decodes to 483,044,758 bytes. Its archive remains complete; metadata
-  and indexing scans stop at the documented 256 MiB budget and report a warning.
+## What changed
 
-This exposed an actual discovery gap: the first implementation ignored native
-`.jsonl.zst` files. Discovery, metadata extraction, and optional text indexing now
-handle them. Restoration still reproduces the original compressed bytes, including
-malformed containers that can only be preserved as opaque data.
+- Canonical JSON strings are shared in their unescaped form, including nested
+  tool-result JSON. A lexical recipe reconstructs their exact original spelling.
+- Canonical base64 is decoded before deduplication. Four-character literal bridges
+  preserve triplets across content-defined boundaries, avoiding alignment losses.
+- Native Codex Zstd is opened only after its entire compressed bitstream is proven
+  reproducible by the pinned Zstd 1.5.7 profile. Unknown profiles stay opaque.
+- Compact references omit redundant per-chunk hashes. Pack and whole-snapshot
+  authentication remain mandatory; SQLite can still be deleted and rebuilt.
+- Unchanged full scans check file identity before parsing or transforming. This
+  also prevents unused transformed objects when reading a legacy archive.
 
-## Compression experiments
+These rules depend on byte representations, not a fixed list of Codex or Claude
+fields. Unknown fields, malformed JSON, binary bytes, whitespace, and original
+compressed containers remain recoverable. The [format contract](FORMAT.md) specifies
+limits and the historical encoder compatibility obligation.
 
-These screening runs used the same frozen 342-file Framework + Mac corpus:
-774,000,764 native bytes. Each completed restore was checked against the input.
-The codec sweep holds the original 64 KiB average chunking policy fixed.
-Times are short, warm-cache, shared-host batch measurements.
+## Screens, including rejected ideas
 
-| Zstd level | Archive bytes | Local total bytes | Initial ingest seconds |
-| --- | ---: | ---: | ---: |
-| 3 | 499,978,948 | 502,313,765 | 4.877 |
-| 9 | 494,096,257 | 496,439,266 | 6.589 |
-| 15 | 492,250,908 | 494,606,206 | 35.733 |
-| 19 | 491,537,725 | 493,860,255 | 90.729 |
+These are exploratory runs, not the final repeated comparison. Some ran alongside
+other development work; their timings do not establish isolated performance.
 
-Level 9 remains the default. Level 15 saves only 0.37% of archive space versus
-level 9 while taking over five times as long; level 19 saves 0.52% at nearly
-14 times the ingestion time. These are one-trial screening observations, not
-sustained throughput estimates.
+| Original 342 files | Complete archive bytes |
+| --- | ---: |
+| Previous format, published median | 490,614,637 |
+| First lexical-sharing prototype | 415,428,050 |
+| Tiny chunks with full hash references | 419,171,924 |
+| Tiny chunks with compact references | 403,326,252 |
+| Normal chunks with base64 bridges and compact references | 409,884,584 |
+| Integrated application, level 9 | 410,635,397 |
+| Integrated application, level 19 | 394,654,410 |
 
-At level 9, we then varied chunking. The first three rows are one-trial screens;
-the selected policy is the median of three fresh trials.
+The tiny-chunk screen needed 358,751 unique chunks versus 123,814 for the normal
+bridged policy, and decompressed about 13.5 GB of packs during restore versus
+5.4 GB. Its modest remote saving did not justify the larger catalog and read work.
+Level 19 recovered another 16.0 MB in the integrated application but took about
+150 seconds to ingest, versus 25 seconds at level 9. The default remains level 9.
 
-| Chunk policy | Archive bytes | Local total bytes | Initial ingest seconds |
-| --- | ---: | ---: | ---: |
-| 64 KiB average everywhere | 494,096,257 | 496,439,266 | 6.589 |
-| 32 KiB average everywhere | 491,191,590 | 495,168,903 | 6.993 |
-| 16 KiB average everywhere | 489,273,111 | 496,564,088 | 7.392 |
-| **32 KiB raw / 256 KiB fixed compressed** | **490,614,920** | **492,978,409** | **6.534** |
+A later pack-placement screen kept text and the two base64 families in separate
+bounded packs. It used 400,356,433 archive bytes, but restore took 24.045 seconds
+versus the selected writer's 24.044-second median. It missed the predeclared 20%
+restore improvement and added two pack buffers, so it was rejected. The exact
+variant is retained as `experiments/typed-packs.patch` against `0173121`.
 
-The selected policy reduces both remote and total storage without increasing
-measured ingestion time materially. Smaller raw chunks help reuse; larger fixed
-chunks avoid rolling-hash work and excess metadata on sealed compressed streams.
-The 16 KiB policy saves payload space but loses the benefit to catalog overhead.
-All policies retain the same bounded pack format and maximum chunk size, so old
-archives remain readable. The final production build is separately rerun in the
-[benchmark report](benchmarks.md).
+### Deeper image coding
 
-## Why native files are not silently transcoded
+We also tested all 770 distinct PNGs extracted from the initial 510-file freeze:
+254,657,749 original PNG bytes and 3,929,425,129 inflated scanline bytes. Experiments
+included deduplicated filtered rows, unfiltered pixels, DEFLATE reconstruction,
+and lossless WebP with exact transparent RGB preservation.
 
-All 251 native compressed files re-encoded byte-for-byte using Zstd 1.5.7,
-level 3, a pledged content size, no checksum, and a single-thread encoder.
-We checked the complete SHA-256 and length of every encoded output.
+604 DEFLATE streams reconstructed exactly with Preflate 0.7.6; 166 used the opaque
+fallback. Every tested WebP round trip preserved pixel bytes. Adaptive pixel coding
+estimated 183,697,085 payload bytes including reconstruction information, compared
+with 220,963,235 bytes for deduplicated original PNGs compressed with Zstd. This is
+**an isolated media screen**, without a complete Nenia asset format, catalog or
+whole-archive recovery test. It is not an advertised archive result. The prototype
+is retained under `experiments/media`; it adds no production dependency.
 
-That makes an encoder-recipe scheme technically possible: deduplicate decoded
-JSONL and regenerate the original Zstd stream during restore. We measured the
-space before deciding. Decoded JSONL stored through Nenia used 333,653,111 archive
-bytes, versus about 380.7 MB for exact native-container storage: roughly 12.4%
-less. A single solid Zstd stream of the decoded data used 324,569,606 payload bytes,
-but has no independent-file recovery metadata.
+### The 150 MB target
 
-We did **not** make ordinary restores depend on preserving a historical encoder
-implementation for that saving. Native compression parameters and future codec
-versions can differ. Exact original bytes, simple recovery, and a stable read
-format remain the default. These decoded-data measurements are diagnostics;
-they are not included in the advertised native backup sizes.
+We did not achieve 150 MB while retaining every byte. In a separate grouping
+experiment on the original corpus, extracted standard-base64 binaries still used
+260.9 MB at Zstd level 9; URL-safe binaries, predominantly encrypted model state,
+used another 86.4 MB. Text, structural literals and recovery metadata are additional.
+These measurements describe tested representations, **not a theoretical lower
+bound or a claim that further compression is impossible**. Dropping attachments
+or encrypted fields would change the backup contract, so these results never count
+such omissions as compression.
 
-## Evidence and reproduction
+## Reproduction
 
-Aggregate samples, settings, executable/code fingerprints, and the native-format
-analysis are under [optimization-2026-10-28](benchmark-results/optimization-2026-10-28/).
-No generated workloads or public datasets were used.
+[Final measurements](benchmarks.md) distinguish complete archives, local catalog
+costs, CPU time and correctness from these screens. Aggregate inputs, samples and
+codec experiments are in [the evidence directory](benchmark-results/structural-2026-10-29/).
+Private source copies, content identities, payloads and per-session metadata remain
+outside the repository.
 
-The level sweep used `real_benchmark run --only-cohort combined --only-candidate
-nenia --trials 1 --skip-index --skip-recovery --skip-growth --level LEVEL` against
-one private frozen corpus. Use a new `--report` directory for each run. The
-pre-optimization implementation is commit `ca51793`; the selected implementation
-is `f625fef`. Isolated chunking variants changed only `MIN_CHUNK_SIZE` to one
-quarter of the chosen average and `AVG_CHUNK_SIZE`, preserving the 256 KiB maximum.
-The fixed-compressed variant additionally used `Chunker::new_fixed` for recognized
-Zstd sources. The final production code and its tests contain that policy.
-
-`tools/analyze_native_traces.py` reproduces the structural and re-encoding checks
-on Linux with Python 3.11+, libzstd and the Zstd 1.5.7 CLI. Supply `--source-dir`,
-`--decoded-dir` outside the checkout, and an aggregate `--report` path. Decoded
-copies and any source mapping stay private. The tool never executes trace content.
+`examples/structure_probe.rs` compares lexical representations on a private
+`real_benchmark` corpus. `tools/analyze_structure.py` inventories decoded values;
+`tools/group_structure_probe.py` groups an early private prototype archive by
+representation. The standalone PNG screen takes a private concatenated PNG stream
+and an aggregate report path; it requires Rust 1.89 or newer. The production binary
+continues to require Rust 1.88. [Earlier opaque-format experiments](format-analysis-v1.md)
+are retained as historical evidence, rather than current design guidance.

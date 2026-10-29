@@ -1,0 +1,141 @@
+{
+  "method": "fresh vault per trial, frozen actual inputs, alternating candidate order, sequential processes",
+  "trials_per_candidate_and_corpus": 3,
+  "level": 9,
+  "resource_scope": "peak RSS and wall time cover complete process, including setup and correctness checks",
+  "recovery": "last current-format complete-corpus trial includes indexing, authenticated HTTP recovery, catalog-loss recovery and observed actual source growth",
+  "runs": [
+    {
+      "label": "original-v1-1",
+      "cohort": "original",
+      "variant": "v1",
+      "repeat": 1,
+      "order": 1,
+      "full_recovery": false,
+      "status": "complete",
+      "return_code": 0,
+      "driver_seconds": 12.951439986005425
+    },
+    {
+      "label": "original-v2-1",
+      "cohort": "original",
+      "variant": "v2",
+      "repeat": 1,
+      "order": 2,
+      "full_recovery": false,
+      "status": "complete",
+      "return_code": 0,
+      "driver_seconds": 51.90247160708532
+    },
+    {
+      "label": "original-v2-2",
+      "cohort": "original",
+      "variant": "v2",
+      "repeat": 2,
+      "order": 3,
+      "full_recovery": false,
+      "status": "complete",
+      "return_code": 0,
+      "driver_seconds": 52.134904918959364
+    },
+    {
+      "label": "original-v1-2",
+      "cohort": "original",
+      "variant": "v1",
+      "repeat": 2,
+      "order": 4,
+      "full_recovery": false,
+      "status": "complete",
+      "return_code": 0,
+      "driver_seconds": 13.251772710122168
+    },
+    {
+      "label": "original-v1-3",
+      "cohort": "original",
+      "variant": "v1",
+      "repeat": 3,
+      "order": 5,
+      "full_recovery": false,
+      "status": "complete",
+      "return_code": 0,
+      "driver_seconds": 13.519903436070308
+    },
+    {
+      "label": "original-v2-3",
+      "cohort": "original",
+      "variant": "v2",
+      "repeat": 3,
+      "order": 6,
+      "full_recovery": false,
+      "status": "complete",
+      "return_code": 0,
+      "driver_seconds": 52.361715170089155
+    },
+    {
+      "label": "complete-v1-1",
+      "cohort": "complete",
+      "variant": "v1",
+      "repeat": 1,
+      "order": 7,
+      "full_recovery": false,
+      "status": "complete",
+      "return_code": 0,
+      "driver_seconds": 45.962294155033305
+    },
+    {
+      "label": "complete-v2-1",
+      "cohort": "complete",
+      "variant": "v2",
+      "repeat": 1,
+      "order": 8,
+      "full_recovery": false,
+      "status": "complete",
+      "return_code": 0,
+      "driver_seconds": 140.94868431403302
+    },
+    {
+      "label": "complete-v2-2",
+      "cohort": "complete",
+      "variant": "v2",
+      "repeat": 2,
+      "order": 9,
+      "full_recovery": false,
+      "status": "complete",
+      "return_code": 0,
+      "driver_seconds": 139.66731384699233
+    },
+    {
+      "label": "complete-v1-2",
+      "cohort": "complete",
+      "variant": "v1",
+      "repeat": 2,
+      "order": 10,
+      "full_recovery": false,
+      "status": "complete",
+      "return_code": 0,
+      "driver_seconds": 45.97962757293135
+    },
+    {
+      "label": "complete-v1-3",
+      "cohort": "complete",
+      "variant": "v1",
+      "repeat": 3,
+      "order": 11,
+      "full_recovery": false,
+      "status": "complete",
+      "return_code": 0,
+      "driver_seconds": 45.94700408400968
+    },
+    {
+      "label": "complete-v2-3",
+      "cohort": "complete",
+      "variant": "v2",
+      "repeat": 3,
+      "order": 12,
+      "full_recovery": true,
+      "status": "complete",
+      "return_code": 0,
+      "driver_seconds": 729.6439006780274
+    }
+  ]
+}

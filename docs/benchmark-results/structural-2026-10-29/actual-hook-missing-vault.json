@@ -1,0 +1,6 @@
+{
+  "status": "invalid_test_setup",
+  "reason": "Second manual invocation used an uninitialized private vault; the supported installer initializes it first",
+  "capture_exercised": false,
+  "private_content_published": false
+}

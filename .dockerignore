@@ -5,3 +5,10 @@
 !Dockerfile
 !src/
 !src/**
+!crates/
+!crates/codecs/
+!crates/codecs/Cargo.toml
+!crates/codecs/src/
+!crates/codecs/src/**
+!.cargo/
+!.cargo/config.toml

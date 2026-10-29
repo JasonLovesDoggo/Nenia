@@ -6,7 +6,8 @@ An object ID is the lowercase, 64-character hexadecimal BLAKE3 hash of the
 caches are not required to interpret the archive. `nenia init` supplies fresh
 configuration before `pull` or a manual recovery.
 
-All integer fields in a pack header are unsigned little-endian:
+All integer fields in a pack header are unsigned little-endian. The original
+format-1 header is:
 
 | Offset | Bytes | Meaning |
 | --- | --- | --- |
@@ -28,7 +29,7 @@ hashes and excessive catalog entries. Both policies share the same format. The f
 may be smaller than the minimum. Empty files have no chunks. Readers do not need
 the chunker or its table: manifests supply every offset and length. A future
 chunking policy can therefore coexist with current readers without recompressing
-old objects. The current writer is specified in `src/pack.rs`.
+old objects. The primitive writer is specified in `crates/codecs/src/pack.rs`.
 
 ## Version 1 manifest
 
@@ -218,3 +219,61 @@ The maximum page limit is 10,000. Uploads are bounded to four simultaneous objec
 bodies and downloads to eight retained object bodies. Saturation returns 429;
 clients retry with bounded exponential backoff. Invalid data is rejected. There
 are no update/delete endpoints and no network access to SQLite.
+
+## Version 2 packs: cold image reconstruction
+
+Nenia 0.2 adds a pack codec while keeping existing manifest recipes and chunk
+coordinates. A format-2 pack's decoded payload is the **original image file's
+bytes**, not its pixels. The same 8 MiB decoded-pack limit and 256 KiB chunk limit
+apply. All encoded objects remain BLAKE3-addressed and bounded to 8 MiB + 64 KiB.
+
+| Offset | Bytes | Meaning |
+| --- | --- | --- |
+| 0 | 8 | `NENIAPK` followed by NUL |
+| 8 | 2 | Version 2 |
+| 10 | 2 | Codec: 1 = PNG, 2 = JPEG, 3 = referenced image body |
+| 12 | 8 | Original image-file length |
+| 20 | 4 | Dependency count, at most 1,024 |
+| 24 | 32 × count | Sorted, unique binary BLAKE3 IDs of ordinary format-1 packs |
+| following | remaining | Versioned reconstruction payload |
+
+Dependencies must be ordinary format-1 packs. The decoder rejects recursive
+image dependencies, undeclared dependencies, and unused dependency declarations.
+A referenced body and its pixels can occupy slices of these ordinary packs;
+whole encoded-body and pixel-object hashes are checked after assembly.
+
+Uploads validate object identity and bounded framing before accepting packs.
+Manifest publication requires all dependencies, complete reconstruction, and the
+original trace hash. This permits arbitrary pack upload order without exposing
+an incomplete snapshot. Catalog recovery and orphan accounting include dependency
+packs.
+
+PNG payloads start with `NENIAPG2`. Their original-file size and hash precede
+independently compressed side data, reconstruction data, and pixels or a pixel
+recipe. Side data preserves non-IDAT chunks, original IDAT splits/CRCs, zlib
+header/trailer bytes, and scanline filters. Reconstruction uses either the bounded
+DEFLATE match recipe, pinned fdeflate 0.3.7 (whole input or per scanline), or pinned
+zlib 1.3.1 with recorded level/memory/strategy. An encoder profile is accepted only
+after reproducing the entire original stream. Portable PNGs reject the legacy
+Preflate correction type.
+
+Pixel recipes may describe independent images, exact scanline/tile fragments,
+keyframe deltas, or exact residual sprites. Pixel arrays are bounded to 32 MiB.
+Leaves use Zstd, lossless WebP, or JPEG XL. Every leaf has an encoded hash, explicit
+layout, and bounded ordinary-pack references. Cached decoded pixels are keyed by
+codec, layout, encoded identity, and storage references; caches cannot bypass
+changed metadata validation. JPEG XL allocation has its own explicit budget.
+
+JPEG payloads start with `NENIAJP2`, followed by mode, original-file size/hash,
+width/height, and opaque Zstd or Lepton 0.5.5 data. Lepton images are bounded to
+8,192 pixels per dimension and 16 megapixels total; writes cannot exceed the
+original-file size. Opaque preservation remains available for unsupported files.
+
+Referenced bodies start with `NENIARF1`: inner codec, original-file length,
+encoded-body hash, encoded-body length, then bounded compressed chunk references.
+They reduce repeated image-header and encoded-body storage without adding a
+recursive pack graph. The implementation is in
+[`crates/codecs`](../crates/codecs/src/media.rs).
+
+`nenia compact --output NEW_VAULT` rewrites manifests into a fresh destination
+and verifies/catalogs the result. It does not delete or mutate source objects.

@@ -2,6 +2,8 @@ FROM rust:1.95-bookworm AS builder
 WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
 COPY src/ src/
+COPY crates/ crates/
+COPY .cargo/config.toml .cargo/config.toml
 RUN cargo build --locked --release --bin nenia
 
 FROM debian:bookworm-slim

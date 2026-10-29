@@ -39,6 +39,7 @@ nenia cat <snapshot> --decoded
 ```
 
 [Hooks](docs/hooks.md) · [S3](docs/remote.md) ·
-[Real-trace measurements](docs/benchmarks.md) · [Archive format](docs/FORMAT.md)
+[Real-trace measurements](docs/benchmarks.md) · [Cold archives](docs/cold.md) ·
+[Archive format](docs/FORMAT.md)
 
 MIT licensed.

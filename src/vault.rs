@@ -1035,7 +1035,8 @@ impl Vault {
         if m.recipe.is_none() && adapters::is_zstd_source(Path::new(&m.origin)) {
             let mut decoder = zstd::stream::read::Decoder::new(reader)?;
             decoder.window_log_max(26)?;
-            std::io::copy(&mut decoder, out)?;
+            let size = std::io::copy(&mut decoder.take(native::MAX_DECODED + 1), out)?;
+            ensure!(size <= native::MAX_DECODED, "decoded view exceeds the 2 GiB output budget; use exact export with an external decoder");
         } else {
             std::io::copy(&mut reader, out)?;
         }

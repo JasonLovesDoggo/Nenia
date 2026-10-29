@@ -1,4 +1,5 @@
 pub mod deflate_recipe;
+pub mod jpeg;
 pub mod png;
 
 // Reuse the production lexical and pack codecs rather than copy them.

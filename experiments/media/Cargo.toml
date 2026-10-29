@@ -38,3 +38,7 @@ path = "src/temporal.rs"
 [[bin]]
 name = "trace-archive"
 path = "src/trace_archive.rs"
+
+[[bin]]
+name = "jpeg-share"
+path = "src/jpeg_share.rs"

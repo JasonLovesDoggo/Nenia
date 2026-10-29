@@ -1,0 +1,3 @@
+[env]
+# Cold PNG reconstruction requires the bundled zlib 1.3.1 implementation.
+VCPKGRS_DISABLE = "1"

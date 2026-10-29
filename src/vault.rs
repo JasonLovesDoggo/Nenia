@@ -364,7 +364,7 @@ impl Vault {
     pub fn receive_object(&mut self, kind: &str, id: &str, bytes: &[u8]) -> Result<bool> {
         match kind {
             "packs" => {
-                pack::decode_pack(bytes, id)?;
+                nenia_codecs::media::preflight(bytes, id)?;
                 let created = pack::atomic_write_immutable(&self.pack_path(id)?, bytes)?;
                 self.register_object("packs", id)?;
                 Ok(created)
@@ -1181,7 +1181,12 @@ impl Vault {
         for id in self.object_ids("manifests", ".json.zst")? {
             let m = self.manifest(&id)?;
             for chunk in &m.chunks {
-                referenced.insert(chunk.pack.clone());
+                if referenced.insert(chunk.pack.clone()) {
+                    let encoded = self.object("packs", &chunk.pack)?;
+                    if nenia_codecs::media::is_media(&encoded) {
+                        referenced.extend(nenia_codecs::media::header(&encoded)?.dependencies);
+                    }
+                }
             }
             self.export_manifest(&m, &mut std::io::sink(), &mut cache)?;
             report.snapshots += 1;
@@ -1320,6 +1325,7 @@ fn modified_key(metadata: &fs::Metadata) -> Result<String> {
 #[derive(Default)]
 struct PackCache {
     entries: Vec<(String, Vec<u8>)>,
+    media: Option<nenia_codecs::media::Decoder>,
 }
 
 impl PackCache {
@@ -1331,7 +1337,15 @@ impl PackCache {
                 self.entries.pop();
             }
             let encoded = read_bounded(&vault.pack_path(id)?, pack::MAX_PACK_RAW_SIZE + 65536)?;
-            let raw = pack::decode_pack(&encoded, id)?;
+            let raw = if nenia_codecs::media::is_media(&encoded) {
+                self.media
+                    .get_or_insert_with(|| {
+                        nenia_codecs::media::Decoder::new(vault.root.join("packs"))
+                    })
+                    .decode(&encoded, id)?
+            } else {
+                pack::decode_pack(&encoded, id)?
+            };
             self.entries.insert(0, (id.to_owned(), raw));
         }
         Ok(&self.entries[0].1)

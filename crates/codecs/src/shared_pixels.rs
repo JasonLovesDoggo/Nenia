@@ -9,7 +9,7 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
 };
-const LIMIT: usize = 128 * 1024 * 1024;
+const LIMIT: usize = 32 * 1024 * 1024;
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Packed {
     pub width: usize,
@@ -17,6 +17,8 @@ pub struct Packed {
     pub channels: usize,
     pub codec: u8,
     pub hash: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub storage: Vec<crate::pack::ChunkRef>,
 }
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Part {
@@ -287,6 +289,7 @@ impl Prepared {
                     channels: frame.channels,
                     codec: frame.codec,
                     hash: hash.clone(),
+                    storage: Vec::new(),
                 };
                 this.objects.insert(hash, (path, 12 + n));
                 frames.insert(id, (frame, packed));
@@ -357,11 +360,16 @@ fn inflate(data: &[u8], limit: usize) -> Result<Vec<u8>> {
     Ok(out)
 }
 type PixelKey = (String, usize, usize, usize, u8);
+type CacheKey = (PixelKey, blake3::Hash);
 pub struct Reader {
     root: PathBuf,
-    cache: VecDeque<(PixelKey, Vec<u8>)>,
-    small: HashMap<PixelKey, Vec<u8>>,
+    cache: VecDeque<(CacheKey, Vec<u8>)>,
+    small: HashMap<CacheKey, Vec<u8>>,
     locations: Option<HashMap<String, (PathBuf, usize)>>,
+    archive: bool,
+    allowed: Option<std::collections::HashSet<String>>,
+    used: std::collections::HashSet<String>,
+    leaf_cache: VecDeque<(String, Vec<u8>)>,
 }
 impl Reader {
     pub fn new(root: PathBuf) -> Self {
@@ -370,7 +378,74 @@ impl Reader {
             cache: VecDeque::new(),
             small: HashMap::new(),
             locations: None,
+            archive: false,
+            allowed: None,
+            used: std::collections::HashSet::new(),
+            leaf_cache: VecDeque::new(),
         }
+    }
+    pub fn archive(root: PathBuf) -> Self {
+        let mut reader = Self::new(root);
+        reader.archive = true;
+        reader
+    }
+    pub fn begin_dependencies(&mut self, ids: &[String]) {
+        self.allowed = Some(ids.iter().cloned().collect());
+        self.used.clear();
+    }
+    pub fn finish_dependencies(&self) -> Result<()> {
+        ensure!(
+            self.allowed.as_ref().is_none_or(|a| a == &self.used),
+            "media dependency list mismatch"
+        );
+        Ok(())
+    }
+    pub fn blob(
+        &mut self,
+        hash: &str,
+        parts: &[crate::pack::ChunkRef],
+        limit: usize,
+    ) -> Result<Vec<u8>> {
+        crate::pack::validate_hash_id(hash)?;
+        ensure!(
+            !parts.is_empty() && parts.len() <= 128 && limit <= 32 * 1024 * 1024,
+            "blob reference budget"
+        );
+        let mut out = Vec::new();
+        for part in parts {
+            crate::pack::validate_hash_id(&part.pack)?;
+            ensure!(
+                part.len > 0 && part.len as usize <= crate::pack::MAX_CHUNK_SIZE,
+                "blob chunk size"
+            );
+            ensure!(
+                self.allowed.as_ref().is_none_or(|a| a.contains(&part.pack)),
+                "undeclared blob dependency"
+            );
+            self.used.insert(part.pack.clone());
+            if let Some(i) = self.leaf_cache.iter().position(|(id, _)| id == &part.pack) {
+                let p = self.leaf_cache.remove(i).unwrap();
+                self.leaf_cache.push_front(p);
+            } else {
+                let bytes = read_bounded(
+                    &self.root.join(format!("{}.nz", part.pack)),
+                    crate::pack::MAX_PACK_ENCODED_SIZE,
+                )?;
+                let raw = crate::pack::decode_pack(&bytes, &part.pack)?;
+                if self.leaf_cache.len() == 8 {
+                    self.leaf_cache.pop_back();
+                }
+                self.leaf_cache.push_front((part.pack.clone(), raw));
+            }
+            let bytes = crate::pack::extract_chunk(&self.leaf_cache.front().unwrap().1, part)?;
+            ensure!(bytes.len() <= limit - out.len(), "blob decoded size");
+            out.extend(bytes);
+        }
+        ensure!(
+            blake3::hash(&out).to_hex().as_str() == hash,
+            "blob identity mismatch"
+        );
+        Ok(out)
     }
     fn packed(&mut self, pack: &Packed) -> Result<&[u8]> {
         ensure!(
@@ -382,12 +457,44 @@ impl Reader {
                 && pack.width * pack.height * pack.channels <= LIMIT,
             "pixel object layout"
         );
+        let mut storage_hash = blake3::Hasher::new();
+        for part in &pack.storage {
+            crate::pack::validate_hash_id(&part.pack)?;
+            if !part.hash.is_empty() {
+                crate::pack::validate_hash_id(&part.hash)?;
+            }
+            ensure!(
+                part.len > 0
+                    && part.len as usize <= crate::pack::MAX_CHUNK_SIZE
+                    && part
+                        .offset
+                        .checked_add(part.len as u64)
+                        .is_some_and(|n| n <= crate::pack::MAX_PACK_RAW_SIZE as u64),
+                "pixel storage bounds"
+            );
+            ensure!(
+                self.allowed.as_ref().is_none_or(|a| a.contains(&part.pack)),
+                "undeclared media dependency"
+            );
+            self.used.insert(part.pack.clone());
+            storage_hash.update(part.pack.as_bytes());
+            storage_hash.update(&part.offset.to_le_bytes());
+            storage_hash.update(&part.len.to_le_bytes());
+            storage_hash.update(part.hash.as_bytes());
+        }
+        ensure!(
+            !self.archive || !pack.storage.is_empty(),
+            "archive pixel storage required"
+        );
         let key = (
-            pack.hash.clone(),
-            pack.width,
-            pack.height,
-            pack.channels,
-            pack.codec,
+            (
+                pack.hash.clone(),
+                pack.width,
+                pack.height,
+                pack.channels,
+                pack.codec,
+            ),
+            storage_hash.finalize(),
         );
         if self.small.contains_key(&key) {
             let bytes = &self.small[&key];
@@ -409,7 +516,34 @@ impl Reader {
                         .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
                 "pixel object name"
             );
-            let encoded = if let Some(locations) = &self.locations {
+            let encoded = if !pack.storage.is_empty() {
+                ensure!(pack.storage.len() <= 128, "pixel storage reference limit");
+                let mut encoded = Vec::new();
+                for part in &pack.storage {
+                    crate::pack::validate_hash_id(&part.pack)?;
+                    if let Some(i) = self.leaf_cache.iter().position(|(id, _)| id == &part.pack) {
+                        let p = self.leaf_cache.remove(i).unwrap();
+                        self.leaf_cache.push_front(p);
+                    } else {
+                        let file = self.root.join(format!("{}.nz", part.pack));
+                        let bytes = read_bounded(&file, crate::pack::MAX_PACK_ENCODED_SIZE)?;
+                        // Strict format-1 decoding rejects recursive media dependencies.
+                        let raw = crate::pack::decode_pack(&bytes, &part.pack)?;
+                        if self.leaf_cache.len() == 8 {
+                            self.leaf_cache.pop_back();
+                        }
+                        self.leaf_cache.push_front((part.pack.clone(), raw));
+                    }
+                    let bytes =
+                        crate::pack::extract_chunk(&self.leaf_cache.front().unwrap().1, part)?;
+                    ensure!(
+                        encoded.len() + bytes.len() <= 16 * 1024 * 1024,
+                        "encoded pixel object budget"
+                    );
+                    encoded.extend_from_slice(bytes);
+                }
+                encoded
+            } else if let Some(locations) = &self.locations {
                 let (path, offset) = locations
                     .get(&pack.hash)
                     .ok_or_else(|| anyhow::anyhow!("missing pixel object"))?;
@@ -417,7 +551,11 @@ impl Reader {
                 ensure!(*offset <= bytes.len(), "pixel object prefix");
                 bytes[*offset..].to_vec()
             } else {
-                fs::read(self.root.join(&pack.hash))?
+                ensure!(
+                    !self.archive,
+                    "archive pixels require immutable pack references"
+                );
+                read_bounded(&self.root.join(&pack.hash), 16 * 1024 * 1024)?
             };
             ensure!(
                 blake3::hash(&encoded).to_hex().as_str() == pack.hash,
@@ -602,7 +740,7 @@ impl Reader {
                     ensure!(
                         base.width == frame.width
                             && base.channels == frame.channels
-                            && dy.abs() <= 16384,
+                            && dy.unsigned_abs() <= 16384,
                         "delta layout"
                     );
                     let data = self.packed(&base)?;
@@ -629,5 +767,81 @@ impl Reader {
             "reconstructed pixel hash"
         );
         Ok(pixels)
+    }
+}
+
+fn read_bounded(path: &Path, limit: usize) -> Result<Vec<u8>> {
+    let mut out = Vec::new();
+    std::fs::File::open(path)?
+        .take(limit as u64 + 1)
+        .read_to_end(&mut out)?;
+    ensure!(out.len() <= limit, "pixel object exceeds encoded budget");
+    Ok(out)
+}
+/// Bind a pixel recipe to ordinary immutable packs. Returns its direct pack IDs.
+pub fn bind_storage(
+    token: &[u8],
+    storage: &HashMap<String, Vec<crate::pack::ChunkRef>>,
+) -> Result<(Vec<u8>, Vec<String>)> {
+    let mut recipe: Recipe = serde_json::from_slice(&inflate(token, 4 * 1024 * 1024)?)?;
+    let mut ids = std::collections::BTreeSet::new();
+    for leaf in recipe.leaves_mut() {
+        leaf.storage = storage
+            .get(&leaf.hash)
+            .ok_or_else(|| anyhow::anyhow!("missing packed pixel object"))?
+            .clone();
+        ensure!(
+            !leaf.storage.is_empty() && leaf.storage.len() <= 128,
+            "pixel storage references"
+        );
+        for part in &leaf.storage {
+            crate::pack::validate_hash_id(&part.pack)?;
+            ids.insert(part.pack.clone());
+        }
+    }
+    Ok((
+        zstd::stream::encode_all(serde_json::to_vec(&recipe)?.as_slice(), 9)?,
+        ids.into_iter().collect(),
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn cached_pixels_do_not_bypass_layout_or_storage_validation() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let rgba = [1, 2, 3, 255, 4, 5, 6, 255, 7, 8, 9, 255, 10, 11, 12, 255];
+        let encoded = png::webp_encode(&rgba, 2, 2, 4)?;
+        let hash = blake3::hash(&encoded).to_hex().to_string();
+        fs::write(dir.path().join(&hash), encoded)?;
+        let mut p = Packed {
+            width: 2,
+            height: 2,
+            channels: 3,
+            codec: 1,
+            hash,
+            storage: Vec::new(),
+        };
+        let mut reader = Reader::new(dir.path().into());
+        assert_eq!(reader.packed(&p)?.len(), 12);
+        p.channels = 4;
+        assert_eq!(reader.packed(&p)?, rgba);
+        p.width = 4;
+        p.height = 1;
+        assert!(reader.packed(&p).is_err());
+        p.width = 2;
+        p.height = 2;
+        p.codec = 99;
+        assert!(reader.packed(&p).is_err());
+        p.codec = 1;
+        p.storage = vec![crate::pack::ChunkRef {
+            hash: String::new(),
+            pack: "invalid".into(),
+            offset: 0,
+            len: 1,
+        }];
+        assert!(reader.packed(&p).is_err());
+        Ok(())
     }
 }

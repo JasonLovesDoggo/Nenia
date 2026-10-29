@@ -1,0 +1,33 @@
+{
+  "candidate": "joint-pixel-representation-planner",
+  "candidate_objects": 5724,
+  "candidate_sources": 5,
+  "canonicalization": {
+    "identity_proof": "BLAKE3 of exact decoded pixels plus dimensions and channels; complete selected images are separately byte-compared",
+    "potential_bytes_before_selection": 11435250,
+    "replaced_encodings": 281,
+    "unique_pixel_arrays": 5792
+  },
+  "canonicalization_seconds": 70.136859355,
+  "cohort": "all",
+  "container_bytes": 115811722,
+  "coordinate_bytes": 116059171,
+  "coordinate_moves": 3,
+  "exact_pixel_restores": 1004,
+  "greedy_bytes": 116059171,
+  "images": 1004,
+  "optimality": "local search; no claim of a global optimum",
+  "planning_seconds": 0.269369082,
+  "restore_with_oracle_seconds": 65.382133825,
+  "scope": "Complete pixel-only archive; exact marginal object and recipe costs; PNG reconstruction excluded; one exploratory trial",
+  "selected_objects": 1404,
+  "selection_by_source_order": [
+    67,
+    0,
+    915,
+    7,
+    15
+  ],
+  "shared_object_closings": 1,
+  "shared_object_openings": 14
+}

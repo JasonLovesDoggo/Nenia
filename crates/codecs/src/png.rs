@@ -1,7 +1,7 @@
 use crate::deflate_recipe;
 use anyhow::{Result, ensure};
 use std::{collections::BTreeMap, io::Read};
-const LIMIT: usize = 128 * 1024 * 1024;
+const LIMIT: usize = 32 * 1024 * 1024;
 const SIGNATURE: &[u8] = b"\x89PNG\r\n\x1a\n";
 fn number(out: &mut Vec<u8>, n: usize) {
     out.extend_from_slice(&(n as u32).to_le_bytes());
@@ -249,8 +249,8 @@ pub fn jxl_decode(data: &[u8], width: usize, height: usize, channels: usize) -> 
     ensure!(n == pixels.len(), "JXL output size");
     Ok(pixels)
 }
-fn frame(data: &[u8], mode: u8, body: &[u8]) -> Vec<u8> {
-    let mut out = b"NENIAPG1".to_vec();
+fn frame(data: &[u8], mode: u8, body: &[u8], portable: bool) -> Vec<u8> {
+    let mut out = if portable { b"NENIAPG2" } else { b"NENIAPG1" }.to_vec();
     out.push(mode);
     number(&mut out, data.len());
     out.extend_from_slice(blake3::hash(data).as_bytes());
@@ -258,8 +258,31 @@ fn frame(data: &[u8], mode: u8, body: &[u8]) -> Vec<u8> {
     out
 }
 pub fn encode(data: &[u8]) -> Result<(Vec<u8>, BTreeMap<String, u64>)> {
+    encode_policy(data, false, false)
+}
+pub fn encode_portable(data: &[u8]) -> Result<(Vec<u8>, BTreeMap<String, u64>)> {
+    portable(data, false)
+}
+pub fn encode_portable_structured(data: &[u8]) -> Result<(Vec<u8>, BTreeMap<String, u64>)> {
+    portable(data, true)
+}
+fn portable(data: &[u8], structured: bool) -> Result<(Vec<u8>, BTreeMap<String, u64>)> {
+    ensure!(data.len() <= LIMIT, "PNG source budget");
+    match encode_policy(data, true, structured) {
+        Ok(v) => Ok(v),
+        Err(_) => Ok((
+            frame(data, 0, &zip(data)?, true),
+            BTreeMap::from([("opaque_fallback".into(), 1)]),
+        )),
+    }
+}
+fn encode_policy(
+    data: &[u8],
+    portable: bool,
+    structured: bool,
+) -> Result<(Vec<u8>, BTreeMap<String, u64>)> {
     let mut stats = BTreeMap::new();
-    let fallback = frame(data, 0, &zip(data)?);
+    let fallback = frame(data, 0, &zip(data)?, portable);
     let img = match parse(data) {
         Ok(v) => v,
         Err(_) => {
@@ -300,34 +323,37 @@ pub fn encode(data: &[u8]) -> Result<(Vec<u8>, BTreeMap<String, u64>)> {
     stats.insert("custom_recipe_bytes".into(), custom.len() as u64);
     let mut correction = custom;
     let mut correction_kind = 0;
-    match preflate_rs::preflate_whole_deflate_stream(
-        &img.idat[2..img.idat.len() - 4],
-        &preflate_rs::PreflateConfig {
-            plain_text_limit: LIMIT,
-            verify_compression: true,
-            ..Default::default()
-        },
-    ) {
-        Ok((v, text)) => {
-            ensure!(
-                text.text() == raw && v.compressed_size == img.idat.len() - 6,
-                "Preflate plaintext/size"
-            );
-            ensure!(
-                preflate_rs::recreate_whole_deflate_stream(&raw, &v.corrections)?
-                    == img.idat[2..img.idat.len() - 4],
-                "Preflate reconstruction differs"
-            );
-            stats.insert("preflate_successes".into(), 1);
-            stats.insert("preflate_recipe_bytes".into(), v.corrections.len() as u64);
-            let candidate = zip(&v.corrections)?;
-            if candidate.len() < correction.len() {
-                correction = candidate;
-                correction_kind = 1;
+    #[cfg(feature = "legacy-preflate")]
+    if !portable {
+        match preflate_rs::preflate_whole_deflate_stream(
+            &img.idat[2..img.idat.len() - 4],
+            &preflate_rs::PreflateConfig {
+                plain_text_limit: LIMIT,
+                verify_compression: true,
+                ..Default::default()
+            },
+        ) {
+            Ok((v, text)) => {
+                ensure!(
+                    text.text() == raw && v.compressed_size == img.idat.len() - 6,
+                    "Preflate plaintext/size"
+                );
+                ensure!(
+                    preflate_rs::recreate_whole_deflate_stream(&raw, &v.corrections)?
+                        == img.idat[2..img.idat.len() - 4],
+                    "Preflate reconstruction differs"
+                );
+                stats.insert("preflate_successes".into(), 1);
+                stats.insert("preflate_recipe_bytes".into(), v.corrections.len() as u64);
+                let candidate = zip(&v.corrections)?;
+                if candidate.len() < correction.len() {
+                    correction = candidate;
+                    correction_kind = 1;
+                }
             }
-        }
-        Err(e) => {
-            stats.insert(format!("preflate_error_{:?}", e.exit_code()), 1);
+            Err(e) => {
+                stats.insert(format!("preflate_error_{:?}", e.exit_code()), 1);
+            }
         }
     }
     // A historical encoder is optional: accept only a complete byte proof.
@@ -338,6 +364,18 @@ pub fn encode(data: &[u8]) -> Result<(Vec<u8>, BTreeMap<String, u64>)> {
             correction_kind = if row == 0 { 2 } else { 3 };
             stats.insert(format!("exact_fdeflate_profile_{correction_kind}"), 1);
             break;
+        }
+    }
+    if portable && correction_kind < 2 {
+        for profile in crate::native_zlib::profiles(img.idat[1]) {
+            if let Ok(candidate) = crate::native_zlib::encode(&raw, img.idat.len() + 64, profile)
+                && candidate == img.idat
+            {
+                correction = zip(&profile)?;
+                correction_kind = 4;
+                stats.insert("exact_zlib_1_3_1".into(), 1);
+                break;
+            }
         }
     }
     let mut pixel = zip(&img.pixels)?;
@@ -366,12 +404,12 @@ pub fn encode(data: &[u8]) -> Result<(Vec<u8>, BTreeMap<String, u64>)> {
     blob(&mut body, &side);
     blob(&mut body, &correction);
     blob(&mut body, &pixel);
-    let candidate = frame(data, 1, &body);
+    let candidate = frame(data, 1, &body, portable);
     stats.insert("independent_pixel_bytes".into(), pixel.len() as u64);
     stats.insert("selected_correction_bytes".into(), correction.len() as u64);
     stats.insert("side_bytes".into(), side.len() as u64);
     stats.insert("pixels_bytes".into(), img.pixels.len() as u64);
-    if candidate.len() < fallback.len() {
+    if structured || candidate.len() < fallback.len() {
         stats.insert(format!("selected_correction_{correction_kind}"), 1);
         stats.insert(format!("selected_pixels_{pixel_kind}"), 1);
         Ok((candidate, stats))
@@ -388,7 +426,7 @@ pub fn decode(input: &[u8]) -> Result<Vec<u8>> {
 
 pub fn externalize(input: &[u8], reference: &[u8]) -> Result<Option<Vec<u8>>> {
     ensure!(
-        input.len() >= 45 && &input[..8] == b"NENIAPG1",
+        input.len() >= 45 && matches!(&input[..8], b"NENIAPG1" | b"NENIAPG2"),
         "PNG container header"
     );
     if input[8] == 0 {
@@ -414,10 +452,10 @@ pub fn decode_with_pixels(
     mut input: &[u8],
     mut resolve: impl FnMut(&[u8]) -> Result<Vec<u8>>,
 ) -> Result<Vec<u8>> {
-    ensure!(
-        input.len() <= LIMIT && take(&mut input, 8)? == b"NENIAPG1",
-        "asset header/size"
-    );
+    ensure!(input.len() <= LIMIT, "asset size");
+    let magic = take(&mut input, 8)?;
+    let portable = magic == b"NENIAPG2";
+    ensure!(portable || magic == b"NENIAPG1", "asset header");
     let mode = take(&mut input, 1)?[0];
     let size = integer(&mut input)?;
     let hash = take(&mut input, 32)?;
@@ -468,7 +506,24 @@ pub fn decode_with_pixels(
         )?;
         let compressed = match correction_kind {
             0 => deflate_recipe::decode(&raw, &correction)?,
-            1 => preflate_rs::recreate_whole_deflate_stream(&raw, &correction)?,
+            1 => {
+                ensure!(!portable, "legacy reconstruction is not a portable codec");
+                #[cfg(feature = "legacy-preflate")]
+                {
+                    preflate_rs::recreate_whole_deflate_stream(&raw, &correction)?
+                }
+                #[cfg(not(feature = "legacy-preflate"))]
+                {
+                    anyhow::bail!("legacy research codec is disabled")
+                }
+            }
+            4 => {
+                ensure!(portable && correction.len() == 3, "native zlib profile");
+                let zlib =
+                    crate::native_zlib::encode(&raw, size, correction.as_slice().try_into()?)?;
+                ensure!(zlib.len() >= 6, "native zlib output");
+                zlib[2..zlib.len() - 4].to_vec()
+            }
             2 | 3 => {
                 ensure!(correction.is_empty(), "unexpected native correction");
                 let row = if correction_kind == 2 {

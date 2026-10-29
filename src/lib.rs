@@ -1,4 +1,5 @@
 pub mod adapters;
+pub mod compact;
 pub mod hooks;
 mod native;
 pub mod pack;

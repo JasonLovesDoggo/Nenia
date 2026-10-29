@@ -1,0 +1,52 @@
+{
+  "candidate": "portable-format-2-media-packs",
+  "catalog_rebuilt_snapshots": 342,
+  "compile_seconds": 295.706592564,
+  "exact_native_zstd_profiles": 251,
+  "files": 342,
+  "input_bytes": 774000764,
+  "ordinary_vault_verification": {
+    "checked_bytes": 774000764,
+    "orphan_packs": 0,
+    "packs": 954,
+    "snapshots": 342
+  },
+  "pixel_leaves": 717,
+  "png_profiles": {
+    "alternate_258_matches": 0,
+    "custom_recipe_bytes": 40306216,
+    "exact_fdeflate_profile_3": 109,
+    "exact_zlib_1_3_1": 299,
+    "independent_pixel_bytes": 118563745,
+    "physical_distance_recipe_bytes": 68932900,
+    "pixels_bytes": 2570423354,
+    "selected_correction_0": 78,
+    "selected_correction_3": 109,
+    "selected_correction_4": 299,
+    "selected_correction_bytes": 5398980,
+    "selected_pixels_0": 21,
+    "selected_pixels_1": 465,
+    "side_bytes": 652058,
+    "unsupported_png": 14,
+    "witness_rank_recipe_bytes": 40306332,
+    "witness_rank_selected": 385
+  },
+  "scope": "Usable Nenia vault, independently verified and rebuilt by the production reader; compilation inputs are private real-data research intermediates",
+  "stats": {
+    "archive_bytes": 302024406,
+    "catalog_bytes": 20099072,
+    "indexed_snapshots": 0,
+    "latest_bytes": 774000764,
+    "logical_bytes": 774000764,
+    "manifest_bytes": 3780363,
+    "origins": 342,
+    "other_bytes": 97,
+    "pack_bytes": 298244043,
+    "packs": 954,
+    "snapshots": 342,
+    "total_bytes": 322123575,
+    "unique_chunk_bytes": 932402527
+  },
+  "unique_media": 865,
+  "verify_and_catalog_seconds": 437.058494047
+}

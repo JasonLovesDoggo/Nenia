@@ -4,7 +4,7 @@
 //! columns compress independently; even the alternate 258 encoding is retained.
 use anyhow::{Result, bail, ensure};
 
-const LIMIT: usize = 128 * 1024 * 1024;
+const LIMIT: usize = 32 * 1024 * 1024;
 const LENGTH: [usize; 29] = [
     3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131,
     163, 195, 227, 258,
@@ -266,6 +266,7 @@ pub fn encode(data: &[u8]) -> Result<Encoded> {
                         distance <= plain.len() && plain.len() + len <= LIMIT,
                         "match bounds"
                     );
+                    ensure!(b.runs.len() < 1_048_576, "match count budget");
                     b.runs.push(run);
                     run = 0;
                     let alternate = len == 258 && symbol == 284;
@@ -334,7 +335,7 @@ pub fn decode(plain: &[u8], mut recipe: &[u8]) -> Result<Vec<u8>> {
         ensure!(size <= plain.len() - pos, "plaintext block bounds");
         let end = pos + size;
         let count = get(&mut recipe)?;
-        ensure!(count <= size / 3, "match count limit");
+        ensure!(count <= size / 3 && count <= 1_048_576, "match count limit");
         let mut runs = Vec::with_capacity(count);
         let mut lengths = Vec::with_capacity(count);
         let mut distances = Vec::with_capacity(count);

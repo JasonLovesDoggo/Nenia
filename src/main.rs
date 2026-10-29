@@ -185,6 +185,11 @@ enum Commands {
     },
     /// Check every object's hash and every reconstructed snapshot.
     Verify,
+    /// Repack encoded image bodies into shared packs in a new vault.
+    Compact {
+        #[arg(long)]
+        output: PathBuf,
+    },
     /// Rebuild the disposable SQLite catalog from verified archive objects.
     Rebuild,
     /// Show payload, metadata, catalog, and total storage sizes.
@@ -561,6 +566,9 @@ async fn run() -> Result<()> {
             output(&serde_json::json!({"indexed":v.index(bytes)?}))?;
         }
         Commands::Verify => output(&Vault::open(&root)?.verify()?)?,
+        Commands::Compact {
+            output: destination,
+        } => output(&nenia::compact::run(&Vault::open(&root)?, &destination)?)?,
         Commands::Rebuild => {
             output(&serde_json::json!({"recovered":Vault::rebuild_catalog(&root)?}))?
         }

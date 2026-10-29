@@ -24,23 +24,24 @@ jobs:
     timeout-minutes: 30
     env:
       CARGO_TERM_COLOR: always
+      VCPKGRS_DISABLE: 1
       RUST_BACKTRACE: 1
       RUST_TEST_THREADS: 1
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.88.0
+          toolchain: 1.95.0
           components: rustfmt, clippy
       - name: Formatting
         if: runner.os == 'Linux'
         run: cargo fmt --all -- --check
       - name: Clippy
         if: runner.os == 'Linux'
-        run: cargo clippy --locked --all-targets -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Tests including real CLI and HTTP server
         timeout-minutes: 8
-        run: cargo test --locked --all-targets -- --nocapture
+        run: cargo test --locked --workspace --all-targets -- --nocapture
       - name: Build release binary
         run: cargo build --locked --release --bin nenia
       - name: Package binary

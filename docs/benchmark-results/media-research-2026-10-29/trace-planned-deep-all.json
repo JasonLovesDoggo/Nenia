@@ -1,0 +1,46 @@
+{
+  "archive_bytes": 531656564,
+  "asset_occurrences": 3097,
+  "candidate": "reversible-media-trace-archive",
+  "class_order": [
+    "literal",
+    "text",
+    "base64_standard",
+    "base64_url"
+  ],
+  "compression_levels": [
+    19,
+    19,
+    9,
+    1
+  ],
+  "dictionary_packs": null,
+  "encode_with_prepared_assets_seconds": 350.531780745,
+  "encoded_class_bytes": [
+    40885581,
+    70271108,
+    40069717,
+    145123706
+  ],
+  "exact_native_zstd_restores": 638,
+  "exact_restores": 1291,
+  "files": 1291,
+  "input_bytes": 2098579235,
+  "manifest_bytes": 9806068,
+  "media_cache_decoded_bytes": 117929870,
+  "media_pack_bytes": 110645466,
+  "packing_profile": "deep",
+  "pixel_object_bytes": 114854918,
+  "restore_with_bytewise_oracle_seconds": 137.211830189,
+  "scope": "Complete trace bytes and source metadata; no disposable SQLite index; asset preprocessing time excluded and reported separately; one exploratory trial",
+  "text_cache_decoded_bytes": 67147595771,
+  "text_pack_bytes": 296350112,
+  "typed_packing": true,
+  "unique_assets": 1767,
+  "unique_class_bytes": [
+    766253871,
+    531596834,
+    49867813,
+    145573237
+  ]
+}

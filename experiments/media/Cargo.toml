@@ -6,6 +6,7 @@ rust-version = "1.89"
 publish = false
 
 [dependencies]
+nenia-codecs = { path = "../../crates/codecs", features = ["legacy-preflate"] }
 anyhow = "1"
 blake3 = "1"
 serde_json = "1"
@@ -19,6 +20,7 @@ fdeflate = "=0.3.7"
 base64 = "0.22"
 tempfile = "3"
 jxl-oxide = { version = "=0.12.6", default-features = false }
+zlib-rs = { version = "=0.6.8", default-features = false, features = ["std"] }
 
 [[bin]]
 name = "reconstruct"

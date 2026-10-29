@@ -1,0 +1,31 @@
+[package]
+name = "nenia-codecs"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+publish = false
+license = "MIT"
+description = "Bounded, reversible archive codecs for Nenia"
+
+[features]
+default = []
+legacy-preflate = ["dep:preflate-rs"]
+
+[dependencies]
+anyhow = "1"
+blake3 = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+zstd = "=0.13.3"
+fdeflate = "=0.3.7"
+flate2 = "1"
+webp = { version = "=0.3.1", default-features = false }
+jxl-oxide = { version = "=0.12.6", default-features = false }
+preflate-rs = { version = "=0.7.6", optional = true }
+libz-sys = { version = "=1.1.22", features = ["static"] }
+libc = "0.2"
+tempfile = "3"
+lepton_jpeg = "=0.5.5"
+
+[dev-dependencies]
+tempfile = "3"

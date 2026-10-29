@@ -1,12 +1,13 @@
 [package]
 name = "nenia"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
-rust-version = "1.88"
+rust-version = "1.89"
 description = "A small, lossless, deduplicating vault for agent traces"
 license = "MIT"
 
 [dependencies]
+nenia-codecs = { path = "crates/codecs" }
 anyhow = "1"
 blake3 = "1"
 base64 = "0.22"
@@ -40,3 +41,8 @@ tower = { version = "0.5", features = ["util"] }
 lto = "thin"
 strip = true
 
+
+[workspace]
+members = ["crates/codecs"]
+default-members = [".", "crates/codecs"]
+exclude = ["experiments/media"]

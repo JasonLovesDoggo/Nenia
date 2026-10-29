@@ -1,0 +1,22 @@
+{
+  "archive_bytes": 403326252,
+  "cache_decompressed_bytes": 13525951079,
+  "cache_hits": 1123548,
+  "cache_misses": 1624,
+  "candidate": "compact-reference-screen",
+  "decoded_bytes": 1736502437,
+  "encode_seconds": 17.496959388,
+  "exact_native_zstd_restores": 251,
+  "exact_restores": 342,
+  "files": 342,
+  "input_bytes": 774000764,
+  "level": 9,
+  "limitations": "screening harness; no catalog; manifest omits origin metadata; native recipe proven during restore rather than ingest; final production benchmark required",
+  "manifest_bytes": 7133834,
+  "operations": 1125172,
+  "pack_bytes": 396192418,
+  "pack_target": 8388608,
+  "restore_seconds": 24.592438421,
+  "unique_chunk_bytes": 849263099,
+  "unique_chunks": 358751
+}

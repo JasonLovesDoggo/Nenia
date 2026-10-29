@@ -123,6 +123,11 @@ fn main() -> Result<()> {
     let mut original = Stream::new();
     let mut corrections = Stream::new();
     let mut aux = Stream::new();
+    let mut webp_selected_bytes = 0u64;
+    let mut webp_selected_images = 0;
+    let mut selected_bytes = 0u64;
+    let mut selected_images = 0;
+    let mut errors = std::collections::BTreeMap::<String, u64>::new();
     let mut count = 0;
     let mut native = 0;
     let mut corrected = 0;
@@ -166,8 +171,11 @@ fn main() -> Result<()> {
         count += 1;
         native += file.len();
         original.add(&file)?;
+        let original_size = zstd::stream::encode_all(file.as_slice(), 9)?.len() as u64;
         if header.len() != 13 || header[12] != 0 {
             failed += 1;
+            selected_bytes += original_size;
+            webp_selected_bytes += original_size;
             continue;
         }
         let width = u32::from_be_bytes(header[..4].try_into()?) as usize;
@@ -209,10 +217,66 @@ fn main() -> Result<()> {
                     recreated == idat[2..idat.len() - 4],
                     "bit-exact reconstruction failed"
                 );
+                let estimate = zstd::stream::encode_all(raw.as_slice(), 9)?.len() as u64
+                    + data.corrections.len() as u64
+                    + zstd::stream::encode_all(side.as_slice(), 9)?.len() as u64
+                    + 64;
+                let mut webp_estimate = estimate.min(original_size);
+                if depth == 8 && matches!(channels, 3 | 4) {
+                    let bitmap = unfilter(&raw, row, bpp)?;
+                    let height = raw.len() / (row + 1);
+                    let encoder = webp::Encoder::new(
+                        &bitmap,
+                        if channels == 4 {
+                            webp::PixelLayout::Rgba
+                        } else {
+                            webp::PixelLayout::Rgb
+                        },
+                        width as u32,
+                        height as u32,
+                    );
+                    let mut config = webp::WebPConfig::new().unwrap();
+                    config.lossless = 1;
+                    config.exact = 1;
+                    config.quality = 75.0;
+                    config.method = 4;
+                    if let Ok(encoded) = encoder.encode_advanced(&config) {
+                        let decoded = webp::Decoder::new(&encoded)
+                            .decode()
+                            .expect("valid own WebP");
+                        let decoded: Vec<u8> = if channels == 4 && !decoded.is_alpha() {
+                            decoded
+                                .chunks_exact(3)
+                                .flat_map(|p| [p[0], p[1], p[2], 255])
+                                .collect()
+                        } else {
+                            decoded.to_vec()
+                        };
+                        ensure!(decoded == bitmap, "WebP changed pixels");
+                        let size = encoded.len() as u64
+                            + data.corrections.len() as u64
+                            + zstd::stream::encode_all(side.as_slice(), 9)?.len() as u64
+                            + 64;
+                        if size < webp_estimate {
+                            webp_estimate = size;
+                            webp_selected_images += 1;
+                        }
+                    }
+                }
+                webp_selected_bytes += webp_estimate;
+                selected_bytes += estimate.min(original_size);
+                if estimate < original_size {
+                    selected_images += 1;
+                }
                 corrections.add(&data.corrections)?;
                 corrected += 1;
             }
-            Err(_) => {
+            Err(error) => {
+                *errors
+                    .entry(format!("{:?}", error.exit_code()))
+                    .or_default() += 1;
+                selected_bytes += original_size;
+                webp_selected_bytes += original_size;
                 failed += 1;
                 corrections.add(&idat)?;
             }
@@ -235,7 +299,7 @@ fn main() -> Result<()> {
     ] {
         stream.flush()?;
     }
-    let report = serde_json::json!({"diagnostic":"Unique real PNG preprocessing; payload-only screening; references not included","images":count,"native_bytes":native,"inflated_bytes":inflated,"original_cdc_zstd_bytes":original.bytes,"filtered_cdc_zstd_bytes":filtered.bytes,"pixels_cdc_zstd_bytes":pixels.bytes,"reconstruction_bytes":corrections.bytes,"auxiliary_bytes":aux.bytes,"pixel_unique_bytes":pixels.raw,"pixel_chunks":pixels.chunks,"filtered_chunks":filtered.chunks,"exact_deflate_reconstructions":corrected,"fallbacks":failed,"seconds":start.elapsed().as_secs_f64()});
+    let report = serde_json::json!({"diagnostic":"Unique real PNG preprocessing; payload-only screening; references not included","webp_selected_bytes":webp_selected_bytes,"webp_selected_images":webp_selected_images,"selected_bytes":selected_bytes,"selected_images":selected_images,"errors":errors,"images":count,"native_bytes":native,"inflated_bytes":inflated,"original_cdc_zstd_bytes":original.bytes,"filtered_cdc_zstd_bytes":filtered.bytes,"pixels_cdc_zstd_bytes":pixels.bytes,"reconstruction_bytes":corrections.bytes,"auxiliary_bytes":aux.bytes,"pixel_unique_bytes":pixels.raw,"pixel_chunks":pixels.chunks,"filtered_chunks":filtered.chunks,"exact_deflate_reconstructions":corrected,"fallbacks":failed,"seconds":start.elapsed().as_secs_f64()});
     fs::write(&args[2], serde_json::to_vec_pretty(&report)?)?;
     println!("{report}");
     Ok(())

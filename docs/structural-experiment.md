@@ -28,3 +28,10 @@ to discard bytes. The archive must keep a bounded opaque fallback when an encode
 or source representation is unrecognized. Existing version-1 archives must remain
 readable. A custom format must specify its reconstruction contract independently
 of a particular provider's evolving JSON schema.
+
+The completed upload was frozen at 2026-10-29 02:37:56 UTC: 1,291 files and
+2,098,579,235 native bytes, including 949 newly supplied files. Nine files repeat
+exact native bytes (11,424,468 bytes); they remain in the corpus as supplied.
+The earlier 510-file freeze is retained as an exploratory input, not described as
+the completed upload. Final measurements use the completed freeze and report the
+original 342-file corpus separately.

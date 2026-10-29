@@ -1,0 +1,58 @@
+[
+  {
+    "group": "base64",
+    "long": false,
+    "raw_bytes": 328701905,
+    "compressed_bytes": 260850683,
+    "seconds": 3.1545716701075435
+  },
+  {
+    "group": "base64",
+    "long": true,
+    "raw_bytes": 328701905,
+    "compressed_bytes": 246718392,
+    "seconds": 3.848513917066157
+  },
+  {
+    "group": "base64url",
+    "long": false,
+    "raw_bytes": 86906996,
+    "compressed_bytes": 86447520,
+    "seconds": 0.17830066406168044
+  },
+  {
+    "group": "base64url",
+    "long": true,
+    "raw_bytes": 86906996,
+    "compressed_bytes": 86437930,
+    "seconds": 0.44084276095964015
+  },
+  {
+    "group": "literal",
+    "long": false,
+    "raw_bytes": 262997462,
+    "compressed_bytes": 17254589,
+    "seconds": 1.513489143922925
+  },
+  {
+    "group": "literal",
+    "long": true,
+    "raw_bytes": 262997462,
+    "compressed_bytes": 18056137,
+    "seconds": 2.0546244711149484
+  },
+  {
+    "group": "text",
+    "long": false,
+    "raw_bytes": 254215560,
+    "compressed_bytes": 34383731,
+    "seconds": 2.2017810221295804
+  },
+  {
+    "group": "text",
+    "long": true,
+    "raw_bytes": 254215560,
+    "compressed_bytes": 29442017,
+    "seconds": 2.193005674984306
+  }
+]

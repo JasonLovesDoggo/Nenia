@@ -1,0 +1,24 @@
+{
+  "auxiliary_bytes": 148159,
+  "diagnostic": "Unique real PNG preprocessing; payload-only screening; references not included",
+  "errors": {
+    "InvalidDeflate": 109,
+    "NoCompressionCandidates": 55,
+    "PredictionFailure": 2
+  },
+  "exact_deflate_reconstructions": 604,
+  "fallbacks": 166,
+  "filtered_cdc_zstd_bytes": 172469606,
+  "filtered_chunks": 200595,
+  "images": 770,
+  "inflated_bytes": 3929425129,
+  "native_bytes": 254657749,
+  "original_cdc_zstd_bytes": 220963235,
+  "pixel_chunks": 202334,
+  "pixel_unique_bytes": 2615377828,
+  "pixels_cdc_zstd_bytes": 210266866,
+  "reconstruction_bytes": 121330930,
+  "seconds": 91.695433138,
+  "selected_bytes": 213317890,
+  "selected_images": 594
+}

@@ -1,0 +1,32 @@
+{
+  "cohorts": {
+    "codex": {
+      "raw_files": 72,
+      "raw_bytes": 357091688
+    },
+    "claude": {
+      "raw_files": 2,
+      "raw_bytes": 2332703
+    },
+    "mac_codex": {
+      "zstd_files": 251,
+      "zstd_bytes": 362748802,
+      "raw_files": 17,
+      "raw_bytes": 51827571
+    },
+    "additional_mixed": {
+      "raw_files": 562,
+      "raw_bytes": 1184177390,
+      "zstd_files": 387,
+      "zstd_bytes": 140401081
+    }
+  },
+  "whole_file_identity": {
+    "files": 1291,
+    "native_bytes": 2098579235,
+    "distinct_native_bytes": 2087154767,
+    "duplicate_files": 9,
+    "duplicate_native_bytes": 11424468
+  },
+  "note": "Exact native-file BLAKE3 equality; decoded cross-container duplication is not counted."
+}

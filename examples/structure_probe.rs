@@ -30,7 +30,18 @@ struct Record {
     bytes: u64,
     content_hash: String,
     recipe: Recipe,
+    #[serde(serialize_with = "compact_chunks")]
     chunks: Vec<ChunkRef>,
+}
+fn compact_chunks<S: serde::Serializer>(
+    chunks: &[ChunkRef],
+    serializer: S,
+) -> std::result::Result<S::Ok, S::Error> {
+    chunks
+        .iter()
+        .map(|c| (&c.pack, c.offset, c.len))
+        .collect::<Vec<_>>()
+        .serialize(serializer)
 }
 struct Store {
     root: PathBuf,
@@ -254,7 +265,7 @@ fn main() -> Result<()> {
             eprintln!("verified {} real files", i + 1);
         }
     }
-    let report = serde_json::json!({"candidate":"lexical-sharing-screen","files":records.len(),"input_bytes":input_bytes,"decoded_bytes":decoded_bytes,"archive_bytes":store.encoded+manifest_bytes,"pack_bytes":store.encoded,"manifest_bytes":manifest_bytes,"unique_chunks":store.refs.len(),"unique_chunk_bytes":store.refs.iter().map(|c|c.len as u64).sum::<u64>(),"operations":ops,"encode_seconds":encode_seconds,"restore_seconds":start.elapsed().as_secs_f64(),"exact_restores":records.len(),"exact_native_zstd_restores":native_files,"pack_target":target,"level":level,"cache_decompressed_bytes":cache.decompressed,"cache_hits":cache.hits,"cache_misses":cache.misses,"limitations":"screening harness; no catalog; manifest omits origin metadata; native recipe proven during restore rather than ingest; final production benchmark required"});
+    let report = serde_json::json!({"candidate":"compact-reference-screen","files":records.len(),"input_bytes":input_bytes,"decoded_bytes":decoded_bytes,"archive_bytes":store.encoded+manifest_bytes,"pack_bytes":store.encoded,"manifest_bytes":manifest_bytes,"unique_chunks":store.refs.len(),"unique_chunk_bytes":store.refs.iter().map(|c|c.len as u64).sum::<u64>(),"operations":ops,"encode_seconds":encode_seconds,"restore_seconds":start.elapsed().as_secs_f64(),"exact_restores":records.len(),"exact_native_zstd_restores":native_files,"pack_target":target,"level":level,"cache_decompressed_bytes":cache.decompressed,"cache_hits":cache.hits,"cache_misses":cache.misses,"limitations":"screening harness; no catalog; manifest omits origin metadata; native recipe proven during restore rather than ingest; final production benchmark required"});
     fs::write(&args[3], serde_json::to_vec_pretty(&report)?)?;
     println!("{report}");
     Ok(())

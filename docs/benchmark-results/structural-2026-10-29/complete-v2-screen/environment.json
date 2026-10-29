@@ -1,0 +1,70 @@
+{
+  "arch": "x86_64",
+  "chunk_average_bytes": 32768,
+  "chunk_max_bytes": 262144,
+  "chunk_min_bytes": 8192,
+  "container": "all",
+  "executable_blake3": "c3cca0243d286240326884504a7ba9920154c9ee44cec8b15a9905da085d2526",
+  "index_enabled": false,
+  "level": 9,
+  "limitations": [
+    "shared development host, power/thermal state uncontrolled",
+    "file lengths, not filesystem allocated blocks or cloud billing",
+    "short batch throughput, not sustained service capacity",
+    "baseline recovery mapping published at final completion, Nenia per ingestion transaction",
+    "all source mappings, filenames, content hashes, credentials and objects remain outside the repository"
+  ],
+  "logical_cpus": 12,
+  "observed_growth_enabled": false,
+  "only_candidate": "nenia",
+  "only_cohort": "combined",
+  "os": "linux",
+  "pack_raw_max_bytes": 8388608,
+  "private_trace_details_in_report": false,
+  "recovery_enabled": false,
+  "rustc": null,
+  "source_code_blake3": [
+    [
+      "Cargo.toml",
+      "3ab209aaf92bc042e9c6326ae8094a1853312e86517a6a1e0029a43a9a902106"
+    ],
+    [
+      "Cargo.lock",
+      "06ae02f3f4107381d36555e405b84b7fa29ef81b98607ef00eda214c2e7b883c"
+    ],
+    [
+      "src/pack.rs",
+      "0ef023fdad4d65d24de6a50145c5242ed0a9c72fb06183964157ad1f8fb8f5e6"
+    ],
+    [
+      "src/structure.rs",
+      "a25be6db1a83a0171a171772641c2d5684716552dfc051ef516d8c95f871a9cb"
+    ],
+    [
+      "src/native.rs",
+      "5d58cf2f2a413fa7874dde0d9b505e85ff04f7063ab0b2776d165bef9eb9e121"
+    ],
+    [
+      "src/vault.rs",
+      "1fa3f1ca8ac260cbec9757a0aba9a68e21302b6fe7aa54f9ee9212f9923412e8"
+    ],
+    [
+      "src/adapters.rs",
+      "728b76eb818ed8a7cc79e45fcb782c5cdf950db648c9f9eceb1a980d1c44ac04"
+    ],
+    [
+      "src/remote.rs",
+      "20a2572e6127182af40b3b148810f87ba0123b3e6bb1204a1a6bfd1f85ab9846"
+    ],
+    [
+      "examples/real_benchmark.rs",
+      "69ab35f3bc1ffe75a6227ed7e1aff5297a177b472e4ceb5c0d5bd7a90ea9a7f8"
+    ]
+  ],
+  "source_commit": "4eb24ab3f580cd523723226fdd7aa711ded877dc",
+  "started_at": "2026-10-29T02:47:05.749825892+00:00",
+  "state": "fresh archives, frozen actual files, warm source cache; no cold-storage claim",
+  "trials": 1,
+  "window_log": 23,
+  "zstd_version": "1.5.7"
+}

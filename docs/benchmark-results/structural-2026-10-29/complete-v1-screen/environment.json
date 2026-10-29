@@ -1,0 +1,62 @@
+{
+  "arch": "x86_64",
+  "chunk_average_bytes": 32768,
+  "chunk_max_bytes": 262144,
+  "chunk_min_bytes": 8192,
+  "container": "all",
+  "executable_blake3": "31c0882eb7f6de02a4b382ec3397999b58d693c11137c9df63679e968eb4feac",
+  "index_enabled": false,
+  "level": 9,
+  "limitations": [
+    "shared development host, power/thermal state uncontrolled",
+    "file lengths, not filesystem allocated blocks or cloud billing",
+    "short batch throughput, not sustained service capacity",
+    "baseline recovery mapping published at final completion, Nenia per ingestion transaction",
+    "all source mappings, filenames, content hashes, credentials and objects remain outside the repository"
+  ],
+  "logical_cpus": 12,
+  "observed_growth_enabled": false,
+  "only_candidate": "nenia",
+  "only_cohort": "combined",
+  "os": "linux",
+  "pack_raw_max_bytes": 8388608,
+  "private_trace_details_in_report": false,
+  "recovery_enabled": false,
+  "rustc": null,
+  "source_code_blake3": [
+    [
+      "Cargo.toml",
+      "2e1032c675bde36d8c09293424f23e51beffdb11d22f3974d99d32853e93ce6c"
+    ],
+    [
+      "Cargo.lock",
+      "6d038a6e5cb0c8c3229ebf0918b35f83cdfb0fe67344c95338b7a4e6f73c45db"
+    ],
+    [
+      "src/pack.rs",
+      "93416697fe9c9f0bf5b07b27e1ff0b6fa377bf1cbfb9e9d587c081762938d0b2"
+    ],
+    [
+      "src/vault.rs",
+      "1c4792aedb6bee7a2ca1bd5ad21ce9e937820d4a937380b002ca7d7abf8f6f39"
+    ],
+    [
+      "src/adapters.rs",
+      "728b76eb818ed8a7cc79e45fcb782c5cdf950db648c9f9eceb1a980d1c44ac04"
+    ],
+    [
+      "src/remote.rs",
+      "20a2572e6127182af40b3b148810f87ba0123b3e6bb1204a1a6bfd1f85ab9846"
+    ],
+    [
+      "examples/real_benchmark.rs",
+      "9a7b5f01829ef9ae8e0dfc0d34161e60b347c59740891cae16477140c2ca3918"
+    ]
+  ],
+  "source_commit": "f62a51364fd58f2077bce3b9d62ecac4d3dd6eb8",
+  "started_at": "2026-10-29T02:43:42.120725918+00:00",
+  "state": "fresh archives, frozen actual files, warm source cache; no cold-storage claim",
+  "trials": 1,
+  "window_log": 23,
+  "zstd_version": "1.5.7"
+}

@@ -23,7 +23,9 @@ if a.private_root.resolve().is_relative_to(repo):
     p.error('private output must be outside repository')
 a.private_root.mkdir(mode=0o700, parents=True, exist_ok=False)
 files = json.loads(a.corpus.read_text())['files']
-files.sort(key=lambda f: (f['provider'] == 'additional_claude', f['provider'], f['copy']))
+files.sort(key=lambda f: (f['provider'].startswith('additional_'), f['provider'], f['copy']))
+baseline_count = sum(not f['provider'].startswith('additional_') for f in files)
+old = None
 seen = set()
 media_seen = set()
 records_seen = set()
@@ -107,12 +109,12 @@ for i, entry in enumerate(files):
     if proc and proc.wait() != 0:
         raise RuntimeError('source decode failed')
     stats['files'] += 1
-    if i == 341 or (i+1) % 50 == 0 or i+1 == len(files):
+    if i + 1 == baseline_count or (i+1) % 50 == 0 or i+1 == len(files):
         print(json.dumps({'files':i+1,'elapsed_seconds':round(time.monotonic()-start,2),'stats':dict(stats),'groups':{k:dict(v) for k,v in groups.items()}}),flush=True)
-        if i == 341:
+        if i + 1 == baseline_count:
             old = {'stats':dict(stats),'groups':{k:dict(v) for k,v in groups.items()}}
 for f in streams.values():
     f.close()
-report = {'diagnostic':'Decoded string values >=128 bytes; exact SHA-256 deduplication; not an archive size estimate','original_342':old,'combined':{'stats':dict(stats),'groups':{k:dict(v) for k,v in groups.items()}},'elapsed_seconds':time.monotonic()-start,'private_content_published':False}
+report = {'diagnostic':'Decoded string values >=128 bytes; exact SHA-256 deduplication; not an archive size estimate','baseline':old,'combined':{'stats':dict(stats),'groups':{k:dict(v) for k,v in groups.items()}},'elapsed_seconds':time.monotonic()-start,'private_content_published':False}
 a.report.parent.mkdir(parents=True,exist_ok=True)
 a.report.write_text(json.dumps(report,indent=2)+'\n')

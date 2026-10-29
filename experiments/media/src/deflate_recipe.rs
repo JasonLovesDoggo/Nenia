@@ -309,10 +309,10 @@ pub fn encode(data: &[u8]) -> Result<Encoded> {
     })
 }
 pub fn decode(plain: &[u8], mut recipe: &[u8]) -> Result<Vec<u8>> {
-    ensure!(
-        plain.len() <= LIMIT && take(&mut recipe, 1)? == [1],
-        "recipe version or size"
-    );
+    ensure!(plain.len() <= LIMIT, "plaintext size");
+    let version = take(&mut recipe, 1)?[0];
+    ensure!(matches!(version, 1 | 2), "recipe version");
+    let mut witness = Witness::new();
     let blocks = get(&mut recipe)?;
     ensure!((1..=65536).contains(&blocks), "block count limit");
     let mut w = Writer::default();
@@ -368,7 +368,12 @@ pub fn decode(plain: &[u8], mut recipe: &[u8]) -> Result<Vec<u8>> {
                 let stored_len = lengths[j];
                 ensure!((3..=259).contains(&stored_len), "match length bounds");
                 let len = stored_len.min(258);
-                let distance = distances[j];
+                let distance = if version == 2 {
+                    witness.advance(plain, pos);
+                    witness.distance(plain, pos, distances[j])?
+                } else {
+                    distances[j]
+                };
                 ensure!(
                     (1..=32768).contains(&distance) && distance <= pos && len <= end - pos,
                     "match distance bounds"
@@ -407,6 +412,121 @@ pub fn decode(plain: &[u8], mut recipe: &[u8]) -> Result<Vec<u8>> {
     Ok(w.data)
 }
 
+/// Replace physical distances with ranks in a deterministic, 32 KiB history.
+/// No compressor identification, training data, or unbounded search is required.
+/// Literal bytes already present in plaintext supply the matching context.
+pub fn rank_recipe(plain: &[u8], mut recipe: &[u8]) -> Result<Vec<u8>> {
+    ensure!(
+        plain.len() <= LIMIT && take(&mut recipe, 1)? == [1],
+        "recipe version/size"
+    );
+    let count = get(&mut recipe)?;
+    ensure!(count <= 65536, "block limit");
+    let mut out = vec![2];
+    put(&mut out, count);
+    let mut witness = Witness::new();
+    let mut pos = 0;
+    for _ in 0..count {
+        let bits = get(&mut recipe)?;
+        put(&mut out, bits);
+        out.extend_from_slice(take(&mut recipe, bits.div_ceil(8))?);
+        let size = get(&mut recipe)?;
+        put(&mut out, size);
+        ensure!(size <= plain.len() - pos, "block bounds");
+        let end = pos + size;
+        let matches = get(&mut recipe)?;
+        put(&mut out, matches);
+        ensure!(matches <= size / 3, "match count");
+        let mut runs = Vec::with_capacity(matches);
+        let mut lengths = Vec::with_capacity(matches);
+        for column in [&mut runs, &mut lengths] {
+            for _ in 0..matches {
+                let v = get(&mut recipe)?;
+                column.push(v);
+                put(&mut out, v);
+            }
+        }
+        for i in 0..matches {
+            let distance = get(&mut recipe)?;
+            ensure!(runs[i] <= end - pos, "literal bounds");
+            pos += runs[i];
+            ensure!(
+                distance > 0 && distance <= pos && distance <= 32768,
+                "distance bounds"
+            );
+            witness.advance(plain, pos);
+            put(&mut out, witness.rank(plain, pos, distance));
+            let len = lengths[i].min(258);
+            ensure!(
+                (3..=259).contains(&lengths[i]) && len <= end - pos,
+                "length bounds"
+            );
+            pos += len;
+        }
+        pos = end;
+    }
+    ensure!(pos == plain.len(), "unused plaintext");
+    out.extend_from_slice(recipe);
+    Ok(out)
+}
+struct Witness {
+    heads: Vec<usize>,
+    previous: Vec<usize>,
+    inserted: usize,
+}
+impl Witness {
+    fn new() -> Self {
+        Self {
+            heads: vec![usize::MAX; 65536],
+            previous: vec![usize::MAX; 32768],
+            inserted: 0,
+        }
+    }
+    fn key(plain: &[u8], pos: usize) -> usize {
+        let v = plain[pos] as u32 | (plain[pos + 1] as u32) << 8 | (plain[pos + 2] as u32) << 16;
+        (v.wrapping_mul(0x9e3779b1) >> 16) as usize
+    }
+    fn advance(&mut self, plain: &[u8], pos: usize) {
+        while self.inserted < pos && self.inserted + 2 < plain.len() {
+            let key = Self::key(plain, self.inserted);
+            self.previous[self.inserted & 32767] = self.heads[key];
+            self.heads[key] = self.inserted;
+            self.inserted += 1;
+        }
+    }
+    fn rank(&self, plain: &[u8], pos: usize, distance: usize) -> usize {
+        let mut candidate = self.heads[Self::key(plain, pos)];
+        for rank in 0..64 {
+            if candidate >= pos || pos - candidate > 32768 {
+                break;
+            }
+            if pos - candidate == distance {
+                return rank;
+            }
+            candidate = self.previous[candidate & 32767];
+        }
+        distance + 64
+    }
+    fn distance(&self, plain: &[u8], pos: usize, rank: usize) -> Result<usize> {
+        if rank >= 64 {
+            return Ok(rank - 64);
+        }
+        ensure!(pos + 2 < plain.len(), "match prefix bounds");
+        let mut candidate = self.heads[Self::key(plain, pos)];
+        for i in 0..=rank {
+            ensure!(
+                candidate < pos && pos - candidate <= 32768,
+                "witness history bounds"
+            );
+            if i == rank {
+                return Ok(pos - candidate);
+            }
+            candidate = self.previous[candidate & 32767];
+        }
+        unreachable!()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -423,6 +543,8 @@ mod tests {
             let parsed = encode(&data).unwrap();
             assert_eq!(parsed.plain, text);
             assert_eq!(decode(&text, &parsed.recipe).unwrap(), data);
+            let ranked = rank_recipe(&text, &parsed.recipe).unwrap();
+            assert_eq!(decode(&text, &ranked).unwrap(), data);
             assert!(decode(&text, &parsed.recipe[..parsed.recipe.len() - 1]).is_err());
             assert!(encode(&data[..data.len() - 1]).is_err());
         }

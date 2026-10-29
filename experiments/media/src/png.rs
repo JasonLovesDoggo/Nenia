@@ -251,7 +251,19 @@ pub fn encode(data: &[u8]) -> Result<(Vec<u8>, BTreeMap<String, u64>)> {
         deflate_recipe::decode(&raw, &encoded.recipe)? == img.idat[2..img.idat.len() - 4],
         "custom DEFLATE reconstruction failed"
     );
-    let custom = zip(&encoded.recipe)?;
+    let mut custom = zip(&encoded.recipe)?;
+    let ranked = deflate_recipe::rank_recipe(&raw, &encoded.recipe)?;
+    ensure!(
+        deflate_recipe::decode(&raw, &ranked)? == img.idat[2..img.idat.len() - 4],
+        "ranked DEFLATE differs"
+    );
+    let ranked = zip(&ranked)?;
+    stats.insert("physical_distance_recipe_bytes".into(), custom.len() as u64);
+    stats.insert("witness_rank_recipe_bytes".into(), ranked.len() as u64);
+    if ranked.len() < custom.len() {
+        custom = ranked;
+        stats.insert("witness_rank_selected".into(), 1);
+    }
     stats.insert(
         "alternate_258_matches".into(),
         encoded.alternate_lengths as u64,

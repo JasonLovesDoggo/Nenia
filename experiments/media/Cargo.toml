@@ -28,3 +28,7 @@ path = "src/pixel_share.rs"
 [[bin]]
 name = "jpeg-screen"
 path = "src/jpeg_screen.rs"
+
+[[bin]]
+name = "temporal"
+path = "src/temporal.rs"

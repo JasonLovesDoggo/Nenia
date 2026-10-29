@@ -1,0 +1,13 @@
+{
+  "outcome": "Complete source and HTTP-downloaded vault byte-verified after independent catalog reconstruction",
+  "verified_source_files": 1291,
+  "verified_recovered_files": 1291,
+  "verified_bytes_per_pass": 2098579235,
+  "native_zstd_files_per_pass": 638,
+  "pre_catalog_step": {
+    "files": 0,
+    "counted_as_validation": false,
+    "reason": "The harness attempted enumeration before rebuilding the catalog. remote.pull transfers objects; the normal CLI rebuilds before use."
+  },
+  "harness_correction": "Reject empty catalogs, rebuild before the first replica oracle, and assert matching file/byte coverage after both rebuilds."
+}

@@ -51,6 +51,10 @@ fn verify(
     let start = Instant::now();
     let vault = Vault::open(root)?;
     let snapshots = vault.list(None, 100_000, true)?;
+    ensure!(
+        !snapshots.is_empty(),
+        "byte oracle requires a populated catalog"
+    );
     let mut bytes = 0;
     let mut native = 0;
     for (i, snapshot) in snapshots.iter().enumerate() {
@@ -100,6 +104,7 @@ async fn main() -> Result<()> {
     let root = Path::new(&args[1]);
     let original = verify(root, &corpus)?;
     let mut report = serde_json::json!({"original":original});
+    fs::write(&args[3], serde_json::to_vec_pretty(&report)?)?;
     if args.get(4).is_some_and(|s| s == "http") {
         let work = tempfile::tempdir_in(root.parent().context("vault parent")?)?;
         let server_root = work.path().join("server");
@@ -130,9 +135,20 @@ async fn main() -> Result<()> {
         let transferred_seconds = start.elapsed().as_secs_f64();
         let _ = stop.send(());
         task.await??;
+        // pull transfers immutable objects; the CLI rebuilds the disposable
+        // catalog before listing or restoring them. An empty list is not proof.
+        Vault::open(&receiver)?.rebuild()?;
         let replica = verify(&receiver, &corpus)?;
+        ensure!(
+            replica["files"] == original["files"] && replica["bytes"] == original["bytes"],
+            "HTTP replica coverage differs"
+        );
         let snapshots = Vault::rebuild_catalog(&receiver)?;
         let rebuilt = verify(&receiver, &corpus)?;
+        ensure!(
+            rebuilt["files"] == original["files"] && rebuilt["bytes"] == original["bytes"],
+            "catalog recovery coverage differs"
+        );
         report["http"] = serde_json::json!({"push":pushed,"pull":pulled,"transfer_seconds":transferred_seconds,"replica":replica,"rebuilt_snapshots":snapshots,"rebuilt":rebuilt});
     }
     fs::write(&args[3], serde_json::to_vec_pretty(&report)?)?;

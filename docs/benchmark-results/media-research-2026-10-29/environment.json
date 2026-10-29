@@ -1,0 +1,32 @@
+{
+  "rustc": "rustc 1.95.0 (59807616e 2026-04-14)",
+  "platform": "Linux-6.12.111+deb13-amd64-x86_64-with-glibc2.41",
+  "hardware_from_same_host": {
+    "cpu": {
+      "Architecture": "x86_64",
+      "CPU(s)": "12",
+      "Model name": "AMD Ryzen 5 7640U w/ Radeon 760M Graphics",
+      "Thread(s) per core": "2",
+      "Core(s) per socket": "6",
+      "Socket(s)": "1",
+      "CPU max MHz": "4971.0000",
+      "CPU min MHz": "400.0000"
+    },
+    "kernel": "6.12.111+deb13-amd64",
+    "memory_total_kib": 23898112,
+    "filesystem": "ext2/ext3",
+    "storage_models": [
+      "CT1000P5PSSD8"
+    ],
+    "conditions": "Shared developer workstation; warm source cache; CPU power/thermal state uncontrolled. Final candidates run sequentially. RSS covers the entire benchmark process, including correctness/recovery, not just ingestion.",
+    "cpu_governor": "powersave"
+  },
+  "protocol": {
+    "input": "frozen private actual traces; no synthetic performance workload",
+    "sizes": "all immutable packs and manifests; disposable catalog reported separately",
+    "timing": "exploratory; compilation and experiments sometimes overlap; no throughput comparison claimed",
+    "reader": "Nenia 0.2 portable codec; no default Preflate dependency",
+    "native_formats": "Codex Zstd 1.5.7, PNG exact generic/fdeflate/zlib reconstruction, JPEG exact Lepton/opaque reconstruction",
+    "reference_depth": "media pack dependencies are only ordinary format-1 packs"
+  }
+}

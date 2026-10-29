@@ -1,0 +1,39 @@
+{
+  "http": {
+    "pull": {
+      "existing_objects": 0,
+      "transferred_bytes": 556793091,
+      "transferred_objects": 3270,
+      "verified_existing_objects": 0
+    },
+    "push": {
+      "existing_objects": 0,
+      "transferred_bytes": 556793091,
+      "transferred_objects": 3270,
+      "verified_existing_objects": 0
+    },
+    "rebuilt": {
+      "bytes": 2098579235,
+      "comparison": "literal byte comparison against frozen original files, including final EOF",
+      "files": 1291,
+      "native_zstd_files": 638,
+      "seconds": 202.463606594
+    },
+    "rebuilt_snapshots": 1291,
+    "replica": {
+      "bytes": 0,
+      "comparison": "literal byte comparison against frozen original files, including final EOF",
+      "files": 0,
+      "native_zstd_files": 0,
+      "seconds": 0.001422388
+    },
+    "transfer_seconds": 366.547587152
+  },
+  "original": {
+    "bytes": 2098579235,
+    "comparison": "literal byte comparison against frozen original files, including final EOF",
+    "files": 1291,
+    "native_zstd_files": 638,
+    "seconds": 196.744263704
+  }
+}

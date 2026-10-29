@@ -505,6 +505,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "libz-sys"
+version = "1.1.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b70e7a7df205e92a1a4cd9aaae7898dac0aa555503cc0a649494d0d60e7651d"
+dependencies = [
+ "cc",
+ "libc",
+ "pkg-config",
+ "vcpkg",
+]
+
+[[package]]
 name = "linux-raw-sys"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -533,6 +545,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "nenia-codecs"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "blake3",
+ "fdeflate",
+ "flate2",
+ "jxl-oxide",
+ "lepton_jpeg",
+ "libc",
+ "libz-sys",
+ "preflate-rs",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "webp",
+ "zstd",
+]
+
+[[package]]
 name = "nenia-media-screen"
 version = "0.0.0"
 dependencies = [
@@ -543,6 +575,7 @@ dependencies = [
  "flate2",
  "jxl-oxide",
  "lepton_jpeg",
+ "nenia-codecs",
  "preflate-rs",
  "serde",
  "serde_json",
@@ -774,6 +807,12 @@ name = "unicode-ident"
 version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
+
+[[package]]
+name = "vcpkg"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
 
 [[package]]
 name = "webp"

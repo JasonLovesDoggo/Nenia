@@ -94,11 +94,19 @@ pub fn encode(
     payload: &[u8],
     dependencies: impl IntoIterator<Item = String>,
 ) -> Result<pack::EncodedPack> {
+    assemble(codec, original.len(), payload, dependencies)
+}
+fn assemble(
+    codec: u16,
+    raw_len: usize,
+    payload: &[u8],
+    dependencies: impl IntoIterator<Item = String>,
+) -> Result<pack::EncodedPack> {
     let dependencies = dependencies.into_iter().collect::<BTreeSet<_>>();
     let mut bytes = MAGIC.to_vec();
     bytes.extend(2u16.to_le_bytes());
     bytes.extend(codec.to_le_bytes());
-    bytes.extend((original.len() as u64).to_le_bytes());
+    bytes.extend((raw_len as u64).to_le_bytes());
     bytes.extend((dependencies.len() as u32).to_le_bytes());
     for id in dependencies {
         pack::validate_hash_id(&id)?;
@@ -110,7 +118,7 @@ pub fn encode(
     Ok(pack::EncodedPack {
         id,
         bytes,
-        raw_len: original.len() as u64,
+        raw_len: raw_len as u64,
     })
 }
 pub struct Decoder {
@@ -196,8 +204,7 @@ pub fn referenced(
         .cloned()
         .chain(parts.iter().map(|p| p.pack.clone()))
         .collect::<BTreeSet<_>>();
-    // encode() uses only the original length; the inner body carries its hash.
-    encode(3, &vec![0; raw_len], &body, deps)
+    assemble(3, raw_len, &body, deps)
 }
 struct Limited {
     bytes: Vec<u8>,

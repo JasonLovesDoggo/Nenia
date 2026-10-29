@@ -1,5 +1,11 @@
 # Benchmarks on actual traces
 
+The newer cold-archive study stores the original corpus in **299,254,562 bytes**
+and the complete corpus in **556,793,091 bytes**. See [cold research](research-media.md)
+for full accounting, rejected candidates, and decoder/recovery validation. The
+measurements below describe the fast capture format retained by ordinary backup.
+
+
 The current format saves **80.0 MB on the original corpus** and **144.2 MB on the
 completed upload** compared with the previous Nenia format. Every measured restore
 matches the original file byte for byte, including native compressed containers.

@@ -266,7 +266,7 @@ fn encode(raw: &[u8], width: usize, height: usize, channels: usize) -> Result<(P
         channels,
         codec,
         hash: blake3::hash(&bytes).to_hex().to_string(),
-        storage:Vec::new(),
+        storage: Vec::new(),
     };
     Ok((packed, bytes))
 }

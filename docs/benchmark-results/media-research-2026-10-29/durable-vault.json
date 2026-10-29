@@ -1,0 +1,24 @@
+{
+  "version": "nenia 0.2.0",
+  "stats": {
+    "snapshots": 1291,
+    "origins": 1291,
+    "indexed_snapshots": 1291,
+    "logical_bytes": 2098579235,
+    "latest_bytes": 2098579235,
+    "unique_chunk_bytes": 1969577048,
+    "packs": 1979,
+    "pack_bytes": 546745997,
+    "manifest_bytes": 10047094,
+    "catalog_bytes": 95121408,
+    "other_bytes": 57441,
+    "archive_bytes": 556793091,
+    "total_bytes": 651971940
+  },
+  "search_smoke": {
+    "query": "function",
+    "returned": 5,
+    "contents_published": false
+  },
+  "recovered_from_immutable_objects": 1291
+}

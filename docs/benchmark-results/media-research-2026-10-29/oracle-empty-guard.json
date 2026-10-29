@@ -1,0 +1,5 @@
+{
+  "guard_rejected_empty_catalog": true,
+  "success_report_written": false,
+  "scope": "negative harness correctness check, not a performance workload"
+}

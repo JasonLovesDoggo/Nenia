@@ -1,0 +1,9 @@
+{
+  "original": {
+    "bytes": 774000764,
+    "comparison": "literal byte comparison against frozen original files, including final EOF",
+    "files": 342,
+    "native_zstd_files": 251,
+    "seconds": 101.237386584
+  }
+}

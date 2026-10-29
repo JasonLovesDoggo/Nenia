@@ -1,4 +1,4 @@
-pub use nenia_codecs::{deflate_recipe,pack,png,shared_pixels};
+pub use nenia_codecs::{deflate_recipe, pack, png, shared_pixels};
 pub mod dictionary_pack;
 pub mod jpeg;
 

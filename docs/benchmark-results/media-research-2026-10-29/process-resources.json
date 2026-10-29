@@ -1,0 +1,34 @@
+{
+  "nenia-portable-original-resource.log": {
+    "peak_rss_kib": 517944,
+    "exit_status": 0
+  },
+  "nenia-portable-all-resource.log": {
+    "peak_rss_kib": 594524,
+    "exit_status": 0
+  },
+  "nenia-oracle-original-resource.log": {
+    "peak_rss_kib": 323732,
+    "exit_status": 0
+  },
+  "nenia-compact-all-resource.log": {
+    "peak_rss_kib": 475332,
+    "exit_status": 0
+  },
+  "nenia-oracle-http-all-resource.log": {
+    "peak_rss_kib": 1655672,
+    "exit_status": 0
+  },
+  "nenia-durable-cold-rebuild-resource.log": {
+    "peak_rss_kib": 395092,
+    "exit_status": 0
+  },
+  "nenia-compact-original-resource.log": {
+    "peak_rss_kib": 424848,
+    "exit_status": 0
+  },
+  "nenia-durable-cold-index-resource.log": {
+    "peak_rss_kib": 331652,
+    "exit_status": 0
+  }
+}

@@ -532,6 +532,48 @@ mod tests {
     use super::*;
     use std::io::Write;
     #[test]
+    fn preserves_alternate_length_and_nonzero_padding() {
+        let mut header = Bits { data: &[], pos: 0 };
+        let (lit, dist) = trees(&mut header, 1).unwrap();
+        let mut w = Writer::default();
+        w.write(1, 1).unwrap();
+        w.write(1, 2).unwrap();
+        lit.write(&mut w, 65).unwrap();
+        lit.write(&mut w, 284).unwrap();
+        w.write(31, 5).unwrap();
+        dist.write(&mut w, 0).unwrap();
+        lit.write(&mut w, 256).unwrap();
+        let padding = (8 - w.pos % 8) % 8;
+        w.write((1 << padding) - 1, padding).unwrap();
+        let encoded = encode(&w.data).unwrap();
+        assert_eq!(encoded.alternate_lengths, 1);
+        assert_eq!(encoded.plain, vec![65; 259]);
+        assert_eq!(decode(&encoded.plain, &encoded.recipe).unwrap(), w.data);
+        assert_eq!(
+            decode(
+                &encoded.plain,
+                &rank_recipe(&encoded.plain, &encoded.recipe).unwrap()
+            )
+            .unwrap(),
+            w.data
+        );
+    }
+    #[test]
+    fn handles_incomplete_fdeflate_tree_and_stored_block_padding() {
+        let text = b"pixel bytes with a zero run\0\0\0\0\0\0\0\0".repeat(100);
+        let zlib = fdeflate::compress_to_vec(&text);
+        let encoded = encode(&zlib[2..zlib.len() - 4]).unwrap();
+        assert_eq!(encoded.plain, text);
+        assert_eq!(
+            decode(&text, &encoded.recipe).unwrap(),
+            zlib[2..zlib.len() - 4]
+        );
+        let raw = [0b11111001, 3, 0, 252, 255, 1, 2, 3];
+        let encoded = encode(&raw).unwrap();
+        assert_eq!(encoded.plain, [1, 2, 3]);
+        assert_eq!(decode(&encoded.plain, &encoded.recipe).unwrap(), raw);
+    }
+    #[test]
     fn round_trip_encoder_levels_and_truncations() {
         // Correctness fixture only; never contributes benchmark measurements.
         let text = b"literal then repetition repetition repetition\0\xff".repeat(200);

@@ -29,15 +29,16 @@ pub struct Recipe {
     pub container: Option<String>,
 }
 
-struct Builder<F> {
+struct Builder<F, A> {
     store: F,
+    asset: A,
     small: bool,
     operations: Vec<Operation>,
     literals: Vec<u8>,
     literal_ops: Vec<usize>,
 }
 
-impl<F: FnMut(&[u8]) -> Result<u32>> Builder<F> {
+impl<F: FnMut(&[u8]) -> Result<u32>, A: FnMut(&[u8]) -> Result<Option<u32>>> Builder<F, A> {
     fn op(&mut self, op: Operation) -> Result<()> {
         ensure!(
             self.operations.len() < MAX_OPERATIONS,
@@ -81,6 +82,10 @@ impl<F: FnMut(&[u8]) -> Result<u32>> Builder<F> {
 
     fn atom(&mut self, bytes: &[u8], flags: u8) -> Result<()> {
         if flags & BASE64 != 0 {
+            if let Some(index) = (self.asset)(bytes)? {
+                self.op([index, 0, bytes.len() as u32, flags as u32 | 64])?;
+                return Ok(());
+            }
             // Binary chunks must keep their own content-defined boundaries. A
             // base64 triplet crossing a boundary is a four-byte literal bridge;
             // the bulk slices then encode independently. No decoder carry state
@@ -240,9 +245,23 @@ pub fn encode_with_policy(
     small: bool,
     store: impl FnMut(&[u8]) -> Result<u32>,
 ) -> Result<Recipe> {
+    encode_with_asset_handler(reader, small, store, |_| Ok(None))
+}
+
+/// Research extension: external binary values use flag 64 and a separate table.
+/// Production format-2 validation deliberately rejects these extended recipes.
+/// Callers must provide their own versioned manifest, bounded resolver and hash
+/// verification. The normal writer never supplies an external asset handler.
+pub fn encode_with_asset_handler(
+    reader: impl Read,
+    small: bool,
+    store: impl FnMut(&[u8]) -> Result<u32>,
+    asset: impl FnMut(&[u8]) -> Result<Option<u32>>,
+) -> Result<Recipe> {
     let mut reader = BufReader::new(reader);
     let mut builder = Builder {
         store,
+        asset,
         small,
         operations: Vec::new(),
         literals: Vec::new(),

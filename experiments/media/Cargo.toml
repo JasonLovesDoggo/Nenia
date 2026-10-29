@@ -16,6 +16,8 @@ webp = { version = "=0.3.1", default-features = false }
 serde = { version = "1", features = ["derive"] }
 lepton_jpeg = "=0.5.5"
 fdeflate = "=0.3.7"
+base64 = "0.22"
+tempfile = "3"
 
 [[bin]]
 name = "reconstruct"
@@ -32,3 +34,7 @@ path = "src/jpeg_screen.rs"
 [[bin]]
 name = "temporal"
 path = "src/temporal.rs"
+
+[[bin]]
+name = "trace-archive"
+path = "src/trace_archive.rs"

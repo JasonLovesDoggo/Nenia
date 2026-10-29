@@ -1,0 +1,30 @@
+{
+  "additional: JPEG SOI": [
+    1,
+    3
+  ],
+  "additional: exact": [
+    308,
+    91477433
+  ],
+  "additional: truncated JPEG entropy": [
+    59,
+    1290147
+  ],
+  "additional: unsupported JPEG marker": [
+    2,
+    260513
+  ],
+  "original: JPEG segment bounds": [
+    1,
+    6
+  ],
+  "original: exact": [
+    350,
+    80655986
+  ],
+  "original: truncated JPEG entropy": [
+    15,
+    1095336
+  ]
+}

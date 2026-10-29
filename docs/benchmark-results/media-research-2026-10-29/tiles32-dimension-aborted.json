@@ -1,0 +1,5 @@
+{
+  "candidate": "32-pixel atlas tiles",
+  "outcome": "aborted before first completed image",
+  "reason": "WebP dimensions capped at 16383; atlas boundary incorrectly allowed 16384; corrected and rerun"
+}

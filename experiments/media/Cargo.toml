@@ -18,6 +18,7 @@ lepton_jpeg = "=0.5.5"
 fdeflate = "=0.3.7"
 base64 = "0.22"
 tempfile = "3"
+jxl-oxide = { version = "=0.12.6", default-features = false }
 
 [[bin]]
 name = "reconstruct"
@@ -42,3 +43,7 @@ path = "src/trace_archive.rs"
 [[bin]]
 name = "jpeg-share"
 path = "src/jpeg_share.rs"
+
+[[bin]]
+name = "jxl-screen"
+path = "src/jxl_screen.rs"

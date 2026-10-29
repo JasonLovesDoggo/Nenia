@@ -1,0 +1,19 @@
+{
+  "archive_bytes": 333684447,
+  "asset_occurrences": 1316,
+  "candidate": "reversible-media-trace-archive",
+  "encode_with_prepared_assets_seconds": 42.263398067,
+  "exact_native_zstd_restores": 251,
+  "exact_restores": 342,
+  "files": 342,
+  "input_bytes": 774000764,
+  "manifest_bytes": 3742106,
+  "media_cache_decoded_bytes": 186579611,
+  "media_pack_bytes": 165889779,
+  "pixel_object_bytes": 0,
+  "restore_with_bytewise_oracle_seconds": 42.230870748,
+  "scope": "Complete trace bytes and source metadata; no disposable SQLite index; asset preprocessing time excluded and reported separately; one exploratory trial",
+  "text_cache_decoded_bytes": 18519760755,
+  "text_pack_bytes": 164052562,
+  "unique_assets": 865
+}

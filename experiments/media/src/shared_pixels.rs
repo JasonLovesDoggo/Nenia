@@ -252,6 +252,7 @@ impl Reader {
             let raw = match pack.codec {
                 0 => inflate(&encoded, LIMIT)?,
                 1 => png::webp_decode(&encoded, pack.width, pack.height, pack.channels)?,
+                2 => png::jxl_decode(&encoded, pack.width, pack.height, pack.channels)?,
                 _ => anyhow::bail!("pixel object codec"),
             };
             ensure!(

@@ -1,0 +1,20 @@
+{
+  "diagnostic": "Lexical spelling categories; nested values may overlap; not an archive size estimate",
+  "files": 342,
+  "stats": {
+    "source_literal_backslash_slashes": 1679,
+    "canonical_occurrences": 275258,
+    "canonical_value_bytes": 1611972287,
+    "canonical_unique_value_bytes": 1079347364,
+    "ascii_unicode_occurrences": 281,
+    "ascii_unicode_value_bytes": 689748,
+    "ascii_unicode_unique_value_bytes": 175776,
+    "other_spelling_occurrences": 57,
+    "other_spelling_value_bytes": 110673,
+    "other_spelling_unique_value_bytes": 44676,
+    "escaped_slashes_occurrences": 4,
+    "escaped_slashes_value_bytes": 996,
+    "escaped_slashes_unique_value_bytes": 249
+  },
+  "seconds": 69.76554854610004
+}

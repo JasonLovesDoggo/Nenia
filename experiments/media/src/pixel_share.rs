@@ -71,7 +71,7 @@ impl Store {
         let height = pending.raw.len() / (width * channels);
         let mut encoded = zstd::stream::encode_all(pending.raw.as_slice(), 9)?;
         let mut codec = 0;
-        if matches!(channels, 3 | 4) {
+        if matches!(channels, 3 | 4) && width <= 16383 && height <= 16383 {
             let candidate = png::webp_encode(&pending.raw, width, height, channels)?;
             if candidate.len() < encoded.len() {
                 encoded = candidate;
@@ -103,7 +103,7 @@ impl Store {
         let group = (width, channels);
         if self.pending.get(&group).is_some_and(|p| {
             p.raw.len() + bytes.len() > 8 * 1024 * 1024
-                || (p.raw.len() + bytes.len()) / (width * channels) > 16384
+                || (p.raw.len() + bytes.len()) / (width * channels) > 16383
         }) {
             self.flush(group)?;
         }

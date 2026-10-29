@@ -34,6 +34,7 @@ struct Base {
     channels: usize,
     pixels: Vec<u8>,
     rows: HashMap<u64, Vec<usize>>,
+    thumbnail: Vec<u8>,
 }
 fn rows(pixels: &[u8], width: usize, channels: usize) -> HashMap<u64, Vec<usize>> {
     let mut map = HashMap::<u64, Vec<usize>>::new();
@@ -48,6 +49,29 @@ fn rows(pixels: &[u8], width: usize, channels: usize) -> HashMap<u64, Vec<usize>
         }
     }
     map
+}
+fn thumbnail(pixels: &[u8], width: usize, height: usize, channels: usize) -> Vec<u8> {
+    let mut out = Vec::with_capacity(64 * channels);
+    for yy in 0..8 {
+        for xx in 0..8 {
+            let x0 = xx * width / 8;
+            let x1 = ((xx + 1) * width / 8).max(x0 + 1).min(width);
+            let y0 = yy * height / 8;
+            let y1 = ((yy + 1) * height / 8).max(y0 + 1).min(height);
+            for c in 0..channels {
+                let mut sum = 0u64;
+                let mut count = 0u64;
+                for y in y0..y1 {
+                    for x in x0..x1 {
+                        sum += pixels[(y * width + x) * channels + c] as u64;
+                        count += 1;
+                    }
+                }
+                out.push((sum / count.max(1)) as u8);
+            }
+        }
+    }
+    out
 }
 fn encode(pixels: &[u8], width: usize, height: usize, channels: usize) -> Result<(u8, Vec<u8>)> {
     let raw = zstd::stream::encode_all(pixels, 9)?;
@@ -152,9 +176,10 @@ fn restore(root: &Path, id: usize, depth: usize) -> Result<(Frame, Vec<u8>)> {
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().collect();
     ensure!(
-        args.len() == 4,
-        "usage: temporal PRIVATE_ASSETS PRIVATE_OUTPUT REPORT"
+        (4..=5).contains(&args.len()),
+        "usage: temporal PRIVATE_ASSETS PRIVATE_OUTPUT REPORT [global]"
     );
+    let global = args.get(4).is_some_and(|s| s == "global");
     let input = Path::new(&args[1]);
     let output = Path::new(&args[2]);
     ensure!(!output.exists(), "output exists");
@@ -193,7 +218,8 @@ fn main() -> Result<()> {
             skipped += 1;
             continue;
         }
-        let features = rows(&img.pixels, img.width, img.channels);
+        let mut features = rows(&img.pixels, img.width, img.channels);
+        let thumb = thumbnail(&img.pixels, img.width, img.height, img.channels);
         let (codec, mut payload) = encode(&img.pixels, img.width, img.height, img.channels)?;
         let independent_bytes = payload.len();
         let mut frame = Frame {
@@ -224,12 +250,38 @@ fn main() -> Result<()> {
             }
             let (&dy, &score) = votes
                 .iter()
-                .max_by_key(|(dy, n)| (**n, std::cmp::Reverse(dy.abs())))
+                .max_by_key(|(dy, n)| (**n, std::cmp::Reverse(dy.abs()), std::cmp::Reverse(**dy)))
                 .unwrap();
-            candidates.push((score, base.id, position, dy));
+            let distance = thumb
+                .iter()
+                .zip(&base.thumbnail)
+                .map(|(&a, &b)| a.abs_diff(b) as usize)
+                .sum::<usize>()
+                / thumb.len().max(1);
+            if !global || score > 0 || distance <= 12 {
+                candidates.push((score, std::cmp::Reverse(distance), base.id, position, dy));
+            }
         }
         candidates.sort_unstable_by(|a, b| b.cmp(a));
-        for &(_, _, position, dy) in candidates.iter().take(2) {
+        for &(_, _, _, position, dy) in candidates.iter().take(2) {
+            if bases[position].pixels.is_empty() {
+                let needed =
+                    bases[position].width * bases[position].height * bases[position].channels;
+                let mut retained = bases.iter().map(|b| b.pixels.len()).sum::<usize>();
+                for i in (0..bases.len()).rev() {
+                    if retained + needed <= 128 * 1024 * 1024 {
+                        break;
+                    }
+                    if i != position {
+                        retained -= bases[i].pixels.len();
+                        bases[i].pixels.clear();
+                        bases[i].pixels.shrink_to_fit();
+                    }
+                }
+                let (keyframe, pixels) = restore(output, bases[position].id, 0)?;
+                ensure!(keyframe.parent.is_none(), "global keyframe depth");
+                bases[position].pixels = pixels;
+            }
             let base = &bases[position];
             for subtract in [false, true] {
                 let diff = residual(
@@ -272,11 +324,30 @@ fn main() -> Result<()> {
         }
         samples.push(serde_json::json!({"ordinal":id,"cohort":asset.cohort,"container_bytes":container.len(),"independent_payload_bytes":independent_bytes,"delta":delta,"scroll_rows":frame.dy,"subtract":frame.subtract}));
         if !delta {
-            while !bases.is_empty()
-                && bases.iter().map(|b| b.pixels.len()).sum::<usize>() + img.pixels.len()
-                    > 128 * 1024 * 1024
-            {
-                bases.pop_back();
+            if global {
+                let mut keys = features.keys().copied().collect::<Vec<_>>();
+                keys.sort_unstable();
+                keys.truncate(64);
+                features.retain(|key, _| keys.binary_search(key).is_ok());
+                let mut retained = img.pixels.len();
+                for base in &mut bases {
+                    retained += base.pixels.len();
+                    if retained > 128 * 1024 * 1024 {
+                        retained -= base.pixels.len();
+                        base.pixels.clear();
+                        base.pixels.shrink_to_fit();
+                    }
+                }
+                if bases.len() == 4096 {
+                    bases.pop_back();
+                }
+            } else {
+                while !bases.is_empty()
+                    && bases.iter().map(|b| b.pixels.len()).sum::<usize>() + img.pixels.len()
+                        > 128 * 1024 * 1024
+                {
+                    bases.pop_back();
+                }
             }
             bases.push_front(Base {
                 id,
@@ -285,6 +356,7 @@ fn main() -> Result<()> {
                 channels: img.channels,
                 pixels: img.pixels,
                 rows: features,
+                thumbnail: thumb,
             });
         }
         if samples.len().is_multiple_of(50) {
@@ -295,7 +367,7 @@ fn main() -> Result<()> {
             );
         }
     }
-    let report = serde_json::json!({"candidate":"scroll-aligned-keyframe-deltas","scope":"Complete pixel-only containers; PNG reconstruction corrections excluded; one exploratory trial","original":original,"images":samples.len(),"skipped_images":skipped,"container_bytes":total,"delta_images":deltas,"max_reference_depth":1,"encoder_reference_pixel_budget":128*1024*1024,"samples":samples,"wall_seconds":start.elapsed().as_secs_f64(),"restore_seconds":decode_seconds});
+    let report = serde_json::json!({"candidate":"scroll-aligned-keyframe-deltas","scope":"Complete pixel-only containers; PNG reconstruction corrections excluded; one exploratory trial","original":original,"images":samples.len(),"skipped_images":skipped,"container_bytes":total,"delta_images":deltas,"max_reference_depth":1,"encoder_reference_pixel_budget":128*1024*1024,"global_keyframes":global,"feature_rows_per_global_keyframe":64,"samples":samples,"wall_seconds":start.elapsed().as_secs_f64(),"restore_seconds":decode_seconds});
     fs::write(&args[3], serde_json::to_vec_pretty(&report)?)?;
     println!(
         "{}",

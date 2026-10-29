@@ -38,7 +38,7 @@ struct Builder<F, A> {
     literal_ops: Vec<usize>,
 }
 
-impl<F: FnMut(&[u8]) -> Result<u32>, A: FnMut(&[u8]) -> Result<Option<u32>>> Builder<F, A> {
+impl<F: FnMut(&[u8], u8) -> Result<u32>, A: FnMut(&[u8]) -> Result<Option<u32>>> Builder<F, A> {
     fn op(&mut self, op: Operation) -> Result<()> {
         ensure!(
             self.operations.len() < MAX_OPERATIONS,
@@ -50,7 +50,7 @@ impl<F: FnMut(&[u8]) -> Result<u32>, A: FnMut(&[u8]) -> Result<Option<u32>>> Bui
 
     fn flush_literals(&mut self) -> Result<()> {
         if !self.literals.is_empty() {
-            let index = (self.store)(&self.literals)?;
+            let index = (self.store)(&self.literals, 0)?;
             for op in self.literal_ops.drain(..) {
                 self.operations[op][0] = index;
             }
@@ -113,7 +113,7 @@ impl<F: FnMut(&[u8]) -> Result<u32>, A: FnMut(&[u8]) -> Result<Option<u32>>> Bui
                 let remaining = part.len() - offset;
                 let len = if last { remaining } else { remaining / 3 * 3 };
                 if len > 0 {
-                    let index = (self.store)(&part)?;
+                    let index = (self.store)(&part, flags)?;
                     self.op([index, offset as u32, len as u32, flags as u32])?;
                 }
                 carry.extend_from_slice(&part[offset + len..]);
@@ -127,7 +127,7 @@ impl<F: FnMut(&[u8]) -> Result<u32>, A: FnMut(&[u8]) -> Result<Option<u32>>> Bui
             };
             for part in chunker {
                 let part = part?;
-                let index = (self.store)(&part)?;
+                let index = (self.store)(&part, flags)?;
                 self.op([index, 0, part.len() as u32, flags as u32])?;
             }
         }
@@ -255,7 +255,18 @@ pub fn encode_with_policy(
 pub fn encode_with_asset_handler(
     reader: impl Read,
     small: bool,
-    store: impl FnMut(&[u8]) -> Result<u32>,
+    mut store: impl FnMut(&[u8]) -> Result<u32>,
+    asset: impl FnMut(&[u8]) -> Result<Option<u32>>,
+) -> Result<Recipe> {
+    encode_with_typed_assets(reader, small, |bytes, _flags| store(bytes), asset)
+}
+
+/// The research writer can segregate literal, text and binary pack payloads.
+/// Flags describe how the referenced bytes are expanded, never their contents.
+pub fn encode_with_typed_assets(
+    reader: impl Read,
+    small: bool,
+    store: impl FnMut(&[u8], u8) -> Result<u32>,
     asset: impl FnMut(&[u8]) -> Result<Option<u32>>,
 ) -> Result<Recipe> {
     let mut reader = BufReader::new(reader);

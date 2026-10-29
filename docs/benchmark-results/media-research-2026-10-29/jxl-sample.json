@@ -1,0 +1,287 @@
+{
+  "candidate": "lossless-JXL-0.11.2-with-pure-Rust-0.12.6-decoder",
+  "container_bytes": 19602780,
+  "decode_seconds": 7.947687420000001,
+  "effort": "7",
+  "images": 30,
+  "independent_payload_bytes": 22531056,
+  "jxl_payload_bytes": 19766765,
+  "original": null,
+  "samples": [
+    {
+      "cohort": "original",
+      "container_bytes": 65972,
+      "independent_payload_bytes": 65798,
+      "jxl_payload_bytes": 99690,
+      "ordinal": 0,
+      "pixels_bytes": 3072000,
+      "selected_codec": 1
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 54442,
+      "independent_payload_bytes": 54268,
+      "jxl_payload_bytes": 80679,
+      "ordinal": 25,
+      "pixels_bytes": 3072000,
+      "selected_codec": 1
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 56197,
+      "independent_payload_bytes": 56022,
+      "jxl_payload_bytes": 60861,
+      "ordinal": 50,
+      "pixels_bytes": 4800000,
+      "selected_codec": 1
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 49695,
+      "independent_payload_bytes": 51230,
+      "jxl_payload_bytes": 49520,
+      "ordinal": 75,
+      "pixels_bytes": 4800000,
+      "selected_codec": 2
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 10257,
+      "independent_payload_bytes": 10084,
+      "jxl_payload_bytes": 14545,
+      "ordinal": 100,
+      "pixels_bytes": 554736,
+      "selected_codec": 1
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 124346,
+      "independent_payload_bytes": 135638,
+      "jxl_payload_bytes": 124171,
+      "ordinal": 125,
+      "pixels_bytes": 4800000,
+      "selected_codec": 2
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 38171,
+      "independent_payload_bytes": 37996,
+      "jxl_payload_bytes": 56991,
+      "ordinal": 157,
+      "pixels_bytes": 4800000,
+      "selected_codec": 1
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 81783,
+      "independent_payload_bytes": 81608,
+      "jxl_payload_bytes": 86106,
+      "ordinal": 182,
+      "pixels_bytes": 4800000,
+      "selected_codec": 1
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 40631,
+      "independent_payload_bytes": 40456,
+      "jxl_payload_bytes": 55931,
+      "ordinal": 207,
+      "pixels_bytes": 4800000,
+      "selected_codec": 1
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 36205,
+      "independent_payload_bytes": 36030,
+      "jxl_payload_bytes": 51527,
+      "ordinal": 232,
+      "pixels_bytes": 4800000,
+      "selected_codec": 1
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 10585,
+      "independent_payload_bytes": 10410,
+      "jxl_payload_bytes": 14339,
+      "ordinal": 257,
+      "pixels_bytes": 4800000,
+      "selected_codec": 1
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 41196,
+      "independent_payload_bytes": 41022,
+      "jxl_payload_bytes": 59753,
+      "ordinal": 282,
+      "pixels_bytes": 3456000,
+      "selected_codec": 1
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 1859986,
+      "independent_payload_bytes": 2105662,
+      "jxl_payload_bytes": 1859811,
+      "ordinal": 287,
+      "pixels_bytes": 10112256,
+      "selected_codec": 2
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 2152468,
+      "independent_payload_bytes": 2542272,
+      "jxl_payload_bytes": 2152293,
+      "ordinal": 288,
+      "pixels_bytes": 10112256,
+      "selected_codec": 2
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 1637483,
+      "independent_payload_bytes": 1935476,
+      "jxl_payload_bytes": 1637308,
+      "ordinal": 289,
+      "pixels_bytes": 10112256,
+      "selected_codec": 2
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 2008011,
+      "independent_payload_bytes": 2289858,
+      "jxl_payload_bytes": 2007836,
+      "ordinal": 290,
+      "pixels_bytes": 10112256,
+      "selected_codec": 2
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 31359,
+      "independent_payload_bytes": 31632,
+      "jxl_payload_bytes": 31185,
+      "ordinal": 308,
+      "pixels_bytes": 2346240,
+      "selected_codec": 2
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 29623,
+      "independent_payload_bytes": 29448,
+      "jxl_payload_bytes": 35606,
+      "ordinal": 333,
+      "pixels_bytes": 6328224,
+      "selected_codec": 1
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 33128,
+      "independent_payload_bytes": 47156,
+      "jxl_payload_bytes": 32953,
+      "ordinal": 358,
+      "pixels_bytes": 7257600,
+      "selected_codec": 2
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 1586282,
+      "independent_payload_bytes": 1917762,
+      "jxl_payload_bytes": 1586107,
+      "ordinal": 425,
+      "pixels_bytes": 10091520,
+      "selected_codec": 2
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 1550754,
+      "independent_payload_bytes": 1879046,
+      "jxl_payload_bytes": 1550579,
+      "ordinal": 427,
+      "pixels_bytes": 10091520,
+      "selected_codec": 2
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 31340,
+      "independent_payload_bytes": 33948,
+      "jxl_payload_bytes": 31167,
+      "ordinal": 443,
+      "pixels_bytes": 1916928,
+      "selected_codec": 2
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 1449647,
+      "independent_payload_bytes": 1738860,
+      "jxl_payload_bytes": 1449472,
+      "ordinal": 470,
+      "pixels_bytes": 10091520,
+      "selected_codec": 2
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 151661,
+      "independent_payload_bytes": 151486,
+      "jxl_payload_bytes": 160134,
+      "ordinal": 553,
+      "pixels_bytes": 9953280,
+      "selected_codec": 1
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 520007,
+      "independent_payload_bytes": 601856,
+      "jxl_payload_bytes": 519832,
+      "ordinal": 578,
+      "pixels_bytes": 9953280,
+      "selected_codec": 2
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 36807,
+      "independent_payload_bytes": 36632,
+      "jxl_payload_bytes": 44324,
+      "ordinal": 603,
+      "pixels_bytes": 9379840,
+      "selected_codec": 1
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 1933512,
+      "independent_payload_bytes": 2152602,
+      "jxl_payload_bytes": 1933337,
+      "ordinal": 707,
+      "pixels_bytes": 9360000,
+      "selected_codec": 2
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 1838182,
+      "independent_payload_bytes": 2039054,
+      "jxl_payload_bytes": 1838007,
+      "ordinal": 709,
+      "pixels_bytes": 9360000,
+      "selected_codec": 2
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 1932200,
+      "independent_payload_bytes": 2150570,
+      "jxl_payload_bytes": 1932025,
+      "ordinal": 710,
+      "pixels_bytes": 9360000,
+      "selected_codec": 2
+    },
+    {
+      "cohort": "original",
+      "container_bytes": 210850,
+      "independent_payload_bytes": 227174,
+      "jxl_payload_bytes": 210676,
+      "ordinal": 712,
+      "pixels_bytes": 2736000,
+      "selected_codec": 2
+    }
+  ],
+  "scope": "Pixel-only control including per-frame metadata; PNG reconstruction excluded; one exploratory trial",
+  "selected_jxl": 17,
+  "selection": "sample",
+  "skipped_images": 0,
+  "wall_seconds": 78.855236201
+}

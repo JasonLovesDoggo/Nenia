@@ -1,0 +1,26 @@
+{
+  "cache_decoded_bytes": 8503674217,
+  "candidate": "shared-pixel-fragments",
+  "chunks": 372327,
+  "container_bytes": 126680053,
+  "encode_seconds": 123.149839211,
+  "exact_pixel_restores": 1004,
+  "images": 1004,
+  "index_bytes": 1265043,
+  "original": {
+    "chunks": 207582,
+    "container_bytes": 94310274,
+    "images": 482,
+    "index_bytes": 658209,
+    "payload_bytes": 93652065,
+    "unique_pixel_bytes": 777958864
+  },
+  "packs": 794,
+  "payload_bytes": 125415010,
+  "pixels_bytes": 5009850611,
+  "restore_with_oracle_seconds": 33.726864793,
+  "scope": "Complete pixel-only archive; excludes PNG shell and DEFLATE correction streams; one exploratory trial",
+  "skipped_images": 35,
+  "tile": 32,
+  "unique_pixels_bytes": 1386448601
+}

@@ -220,6 +220,35 @@ pub fn webp_decode(data: &[u8], width: usize, height: usize, channels: usize) ->
         Ok(decoded.to_vec())
     }
 }
+pub fn jxl_decode(data: &[u8], width: usize, height: usize, channels: usize) -> Result<Vec<u8>> {
+    ensure!(
+        width > 0
+            && height > 0
+            && width <= 16384
+            && height <= 16384
+            && (1..=4).contains(&channels)
+            && width * height * channels <= LIMIT,
+        "JXL pixel budget"
+    );
+    let image = jxl_oxide::JxlImage::builder()
+        .alloc_tracker(jxl_oxide::AllocTracker::with_limit(512 * 1024 * 1024))
+        .read(data)
+        .map_err(|e| anyhow::anyhow!("JXL header: {e}"))?;
+    ensure!(
+        image.width() as usize == width
+            && image.height() as usize == height
+            && image.pixel_format().channels() == channels
+            && image.num_loaded_keyframes() == 1,
+        "JXL layout"
+    );
+    let render = image
+        .render_frame(0)
+        .map_err(|e| anyhow::anyhow!("JXL decode: {e}"))?;
+    let mut pixels = vec![0u8; width * height * channels];
+    let n = render.stream().write_to_buffer(&mut pixels);
+    ensure!(n == pixels.len(), "JXL output size");
+    Ok(pixels)
+}
 fn frame(data: &[u8], mode: u8, body: &[u8]) -> Vec<u8> {
     let mut out = b"NENIAPG1".to_vec();
     out.push(mode);

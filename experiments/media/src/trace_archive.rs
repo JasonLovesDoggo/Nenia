@@ -52,45 +52,60 @@ struct Record {
 }
 struct Store {
     root: PathBuf,
-    builder: PackBuilder,
-    pending: Vec<usize>,
+    builders: [PackBuilder; 4],
+    pending: [Vec<usize>; 4],
     refs: Vec<ChunkRef>,
     seen: HashMap<blake3::Hash, usize>,
     bytes: u64,
+    typed: bool,
+    unique_classes: [u64; 4],
+    encoded_classes: [u64; 4],
 }
 impl Store {
-    fn new(root: PathBuf) -> Result<Self> {
+    fn new(root: PathBuf, typed: bool) -> Result<Self> {
         fs::create_dir_all(&root)?;
         Ok(Self {
             root,
-            builder: PackBuilder::new(9),
-            pending: Vec::new(),
+            builders: std::array::from_fn(|_| PackBuilder::new(9)),
+            pending: std::array::from_fn(|_| Vec::new()),
             refs: Vec::new(),
             seen: HashMap::new(),
             bytes: 0,
+            typed,
+            unique_classes: [0; 4],
+            encoded_classes: [0; 4],
         })
     }
-    fn flush(&mut self) -> Result<()> {
-        if self.builder.is_empty() {
+    fn flush_one(&mut self, kind: usize) -> Result<()> {
+        if self.builders[kind].is_empty() {
             return Ok(());
         }
-        let p = std::mem::replace(&mut self.builder, PackBuilder::new(9)).finish()?;
+        let p = std::mem::replace(&mut self.builders[kind], PackBuilder::new(9)).finish()?;
         pack::atomic_write_immutable(&self.root.join(format!("{}.nz", p.id)), &p.bytes)?;
-        for id in self.pending.drain(..) {
+        for id in self.pending[kind].drain(..) {
             self.refs[id].pack = p.id.clone();
         }
         self.bytes += p.bytes.len() as u64;
+        self.encoded_classes[kind] += p.bytes.len() as u64;
         Ok(())
     }
-    fn put(&mut self, data: &[u8]) -> Result<usize> {
+    fn flush(&mut self) -> Result<()> {
+        for kind in 0..4 {
+            self.flush_one(kind)?;
+        }
+        Ok(())
+    }
+    fn put(&mut self, data: &[u8], kind: usize) -> Result<usize> {
         let hash = blake3::hash(data);
         if let Some(&id) = self.seen.get(&hash) {
             return Ok(id);
         }
-        if !self.builder.can_fit(data.len()) {
-            self.flush()?;
+        self.unique_classes[kind] += data.len() as u64;
+        let kind = if self.typed { kind } else { 0 };
+        if !self.builders[kind].can_fit(data.len()) {
+            self.flush_one(kind)?;
         }
-        let offset = self.builder.add(data)?;
+        let offset = self.builders[kind].add(data)?;
         let id = self.refs.len();
         self.refs.push(ChunkRef {
             hash: String::new(),
@@ -98,7 +113,7 @@ impl Store {
             offset,
             len: data.len() as u32,
         });
-        self.pending.push(id);
+        self.pending[kind].push(id);
         self.seen.insert(hash, id);
         Ok(id)
     }
@@ -167,8 +182,8 @@ fn asset_decode(codec: u8, data: &[u8], pixels: &mut shared_pixels::Reader) -> R
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().collect();
     ensure!(
-        (8..=9).contains(&args.len()),
-        "usage: trace-archive CORPUS PRIVATE_ASSETS PRIVATE_PNG_OR_DASH PRIVATE_JPEG_OR_DASH PRIVATE_OUTPUT REPORT original|all [PRIVATE_PIXEL_STORE]"
+        (8..=10).contains(&args.len()),
+        "usage: trace-archive CORPUS PRIVATE_ASSETS PRIVATE_PNG_OR_DASH PRIVATE_JPEG_OR_DASH PRIVATE_OUTPUT REPORT original|all [PRIVATE_PIXEL_STORE_OR_DASH] [typed]"
     );
     let mut corpus: Corpus = serde_json::from_slice(&fs::read(&args[1])?)?;
     corpus.files.sort_by_key(|f| {
@@ -215,11 +230,13 @@ fn main() -> Result<()> {
     }
     let prepared_pixels = args
         .get(8)
+        .filter(|p| p.as_str() != "-")
         .map(|p| shared_pixels::Prepared::open(Path::new(p)))
         .transpose()?;
     let mut pixels = shared_pixels::Reader::new(root.join("pixels"));
-    let mut store = Store::new(root.join("packs"))?;
-    let mut media = Store::new(root.join("media"))?;
+    let typed = args.get(9).is_some_and(|s| s == "typed");
+    let mut store = Store::new(root.join("packs"), typed)?;
+    let mut media = Store::new(root.join("media"), false)?;
     let mut saved = HashMap::<blake3::Hash, usize>::new();
     let mut global_assets = Vec::<(Asset, Vec<usize>)>::new();
     let mut records = Vec::new();
@@ -240,11 +257,18 @@ fn main() -> Result<()> {
         let mut ids = Vec::new();
         let mut local_assets = HashMap::new();
         let mut asset_ids = Vec::new();
-        let mut recipe = structure::encode_with_asset_handler(
+        let mut recipe = structure::encode_with_typed_assets(
             reader,
             false,
-            |part| {
-                let global = store.put(part)?;
+            |part, flags| {
+                let kind = if flags & 8 != 0 {
+                    if flags & 16 != 0 { 3 } else { 2 }
+                } else if flags != 0 {
+                    1
+                } else {
+                    0
+                };
+                let global = store.put(part, kind)?;
                 Ok(*local.entry(global).or_insert_with(|| {
                     ids.push(global);
                     ids.len() as u32 - 1
@@ -277,7 +301,7 @@ fn main() -> Result<()> {
                     );
                     let mut parts = Vec::new();
                     for part in Chunker::new(encoded.as_slice()) {
-                        parts.push(media.put(&part?)?);
+                        parts.push(media.put(&part?, 0)?);
                     }
                     let id = global_assets.len();
                     global_assets.push((
@@ -348,6 +372,8 @@ fn main() -> Result<()> {
     let media_bytes = media.bytes;
     let assets = global_assets.len();
     let encode_seconds = start.elapsed().as_secs_f64();
+    let unique_classes = store.unique_classes;
+    let encoded_classes = store.encoded_classes;
     drop(records);
     drop(global_assets);
     drop(saved);
@@ -464,7 +490,7 @@ fn main() -> Result<()> {
             eprintln!("{} exact trace restores", i + 1);
         }
     }
-    let report = serde_json::json!({"candidate":"reversible-media-trace-archive","scope":"Complete trace bytes and source metadata; no disposable SQLite index; asset preprocessing time excluded and reported separately; one exploratory trial","files":corpus.files.len(),"input_bytes":bytes,"archive_bytes":payload_bytes+media_bytes+manifest_bytes+pixel_bytes,"text_pack_bytes":payload_bytes,"media_pack_bytes":media_bytes,"pixel_object_bytes":pixel_bytes,"manifest_bytes":manifest_bytes,"unique_assets":assets,"asset_occurrences":asset_occurrences,"exact_restores":corpus.files.len(),"exact_native_zstd_restores":native,"encode_with_prepared_assets_seconds":encode_seconds,"restore_with_bytewise_oracle_seconds":start.elapsed().as_secs_f64(),"text_cache_decoded_bytes":cache.decoded,"media_cache_decoded_bytes":media_cache.decoded});
+    let report = serde_json::json!({"candidate":"reversible-media-trace-archive","scope":"Complete trace bytes and source metadata; no disposable SQLite index; asset preprocessing time excluded and reported separately; one exploratory trial","files":corpus.files.len(),"input_bytes":bytes,"archive_bytes":payload_bytes+media_bytes+manifest_bytes+pixel_bytes,"text_pack_bytes":payload_bytes,"media_pack_bytes":media_bytes,"pixel_object_bytes":pixel_bytes,"manifest_bytes":manifest_bytes,"unique_assets":assets,"asset_occurrences":asset_occurrences,"typed_packing":typed,"class_order":["literal","text","base64_standard","base64_url"],"unique_class_bytes":unique_classes,"encoded_class_bytes":encoded_classes,"exact_restores":corpus.files.len(),"exact_native_zstd_restores":native,"encode_with_prepared_assets_seconds":encode_seconds,"restore_with_bytewise_oracle_seconds":start.elapsed().as_secs_f64(),"text_cache_decoded_bytes":cache.decoded,"media_cache_decoded_bytes":media_cache.decoded});
     fs::write(&args[6], serde_json::to_vec_pretty(&report)?)?;
     println!("{report}");
     Ok(())

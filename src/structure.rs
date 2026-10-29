@@ -80,30 +80,40 @@ impl<F: FnMut(&[u8]) -> Result<u32>> Builder<F> {
     }
 
     fn atom(&mut self, bytes: &[u8], flags: u8) -> Result<()> {
-        if flags & BASE64 != 0 && !self.small {
-            for part in bytes.chunks(MAX_CHUNK_SIZE / 3 * 3) {
-                let index = (self.store)(part)?;
-                self.op([index, 0, part.len() as u32, flags as u32])?;
-            }
-        } else if flags & BASE64 != 0 {
-            // CDC boundaries aligned to three bytes preserve independent base64
-            // expansion while finding overlap inside different image containers.
-            let mut boundary = 0;
-            let mut start = 0;
-            for part in Chunker::new_small(bytes) {
-                boundary += part?.len();
-                let end = if boundary == bytes.len() {
-                    boundary
-                } else {
-                    boundary / 3 * 3
-                };
-                if end > start {
-                    let part = &bytes[start..end];
-                    let index = (self.store)(part)?;
-                    self.op([index, 0, part.len() as u32, flags as u32])?;
-                    start = end;
+        if flags & BASE64 != 0 {
+            // Binary chunks must keep their own content-defined boundaries. A
+            // base64 triplet crossing a boundary is a four-byte literal bridge;
+            // the bulk slices then encode independently. No decoder carry state
+            // and no modulo-three alignment that would prevent shifted reuse.
+            let chunker = if self.small {
+                Chunker::new_small(bytes)
+            } else {
+                Chunker::new(bytes)
+            };
+            let mut carry = Vec::new();
+            let mut consumed = 0;
+            for part in chunker {
+                let part = part?;
+                consumed += part.len();
+                let last = consumed == bytes.len();
+                let mut offset = 0;
+                if !carry.is_empty() {
+                    offset = (3 - carry.len()).min(part.len());
+                    carry.extend_from_slice(&part[..offset]);
+                    if carry.len() == 3 || last {
+                        self.literal(engine(flags).encode(&carry).as_bytes(), flags & 7)?;
+                        carry.clear();
+                    }
                 }
+                let remaining = part.len() - offset;
+                let len = if last { remaining } else { remaining / 3 * 3 };
+                if len > 0 {
+                    let index = (self.store)(&part)?;
+                    self.op([index, offset as u32, len as u32, flags as u32])?;
+                }
+                carry.extend_from_slice(&part[offset + len..]);
             }
+            ensure!(carry.is_empty(), "incomplete base64 bridge");
         } else {
             let chunker = if self.small {
                 Chunker::new_small(bytes)

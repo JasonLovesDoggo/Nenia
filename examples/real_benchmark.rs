@@ -437,6 +437,10 @@ struct Sample {
     metadata_poll_seconds: Option<f64>,
     metadata_poll_input_bytes: Option<u64>,
     restored_files: usize,
+    restore_seconds: Option<f64>,
+    structural_snapshots: Option<usize>,
+    native_reconstructed: Option<usize>,
+    native_opaque: Option<usize>,
     errors: usize,
 }
 
@@ -484,6 +488,10 @@ fn measure(
         metadata_poll_seconds: None,
         metadata_poll_input_bytes: None,
         restored_files: 0,
+        restore_seconds: None,
+        structural_snapshots: None,
+        native_reconstructed: None,
+        native_opaque: None,
         errors: 0,
     };
     let mut elapsed = Duration::ZERO;
@@ -511,7 +519,27 @@ fn measure(
         s.manifest_bytes = stats.manifest_bytes;
         s.archive_bytes = stats.archive_bytes;
         s.unique_chunk_bytes = Some(stats.unique_chunk_bytes);
+        let restore_start = Instant::now();
         s.restored_files = verify(&vault, &report.snapshots, files)?;
+        s.restore_seconds = Some(restore_start.elapsed().as_secs_f64());
+        let mut structural = 0;
+        let mut native = 0;
+        let mut opaque = 0;
+        for (id, file) in report.snapshots.iter().zip(files) {
+            let manifest = vault.manifest(id)?;
+            structural += usize::from(manifest.recipe.is_some());
+            native += usize::from(
+                manifest
+                    .recipe
+                    .as_ref()
+                    .is_some_and(|r| r.container.is_some()),
+            );
+            opaque +=
+                usize::from(trace_suffix(&file.copy) == "jsonl.zst" && manifest.recipe.is_none());
+        }
+        s.structural_snapshots = Some(structural);
+        s.native_reconstructed = Some(native);
+        s.native_opaque = Some(opaque);
         let started = Instant::now();
         let unchanged = vault.ingest(&inputs, Source::Auto)?;
         s.unchanged_capture_seconds = Some(started.elapsed().as_secs_f64());
@@ -775,6 +803,8 @@ async fn run(args: &Args) -> Result<()> {
         "Cargo.toml",
         "Cargo.lock",
         "src/pack.rs",
+        "src/structure.rs",
+        "src/native.rs",
         "src/vault.rs",
         "src/adapters.rs",
         "src/remote.rs",

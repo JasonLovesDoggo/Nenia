@@ -1,5 +1,9 @@
 use crate::adapters::{self, Candidate, Metadata, Source};
 use crate::pack::{self, ChunkRef, Chunker, PackBuilder};
+use crate::{
+    native,
+    structure::{self, Recipe},
+};
 use anyhow::{bail, ensure, Context, Result};
 use chrono::Utc;
 use fs2::FileExt;
@@ -39,6 +43,8 @@ pub struct Manifest {
     pub bytes: u64,
     pub metadata: Metadata,
     pub chunks: Vec<ChunkRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recipe: Option<Recipe>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -140,7 +146,15 @@ pub fn decode_manifest(encoded: &[u8], expected_id: &str) -> Result<Manifest> {
 }
 
 fn validate_manifest(m: &Manifest) -> Result<()> {
-    ensure!(m.version == 1, "unsupported manifest version {}", m.version);
+    ensure!(
+        matches!(m.version, 1 | 2),
+        "unsupported manifest version {}",
+        m.version
+    );
+    ensure!(
+        (m.version == 2) == m.recipe.is_some(),
+        "manifest version/recipe mismatch"
+    );
     pack::validate_hash_id(&m.content_hash)?;
     ensure!(
         m.chunks.len() <= MAX_SNAPSHOT_CHUNKS,
@@ -152,7 +166,9 @@ fn validate_manifest(m: &Manifest) -> Result<()> {
     );
     let mut total = 0u64;
     for c in &m.chunks {
-        pack::validate_hash_id(&c.hash)?;
+        if m.version == 1 || !c.hash.is_empty() {
+            pack::validate_hash_id(&c.hash)?;
+        }
         pack::validate_hash_id(&c.pack)?;
         ensure!(
             c.len > 0 && c.len as usize <= pack::MAX_CHUNK_SIZE,
@@ -168,10 +184,54 @@ fn validate_manifest(m: &Manifest) -> Result<()> {
             .checked_add(c.len as u64)
             .context("snapshot size overflow")?;
     }
-    ensure!(
-        total == m.bytes,
-        "manifest chunk lengths do not match snapshot size"
-    );
+    if let Some(recipe) = &m.recipe {
+        pack::validate_hash_id(&recipe.decoded_hash)?;
+        ensure!(
+            recipe.operations.len() <= structure::MAX_OPERATIONS,
+            "too many structural operations"
+        );
+        ensure!(
+            recipe.decoded_bytes <= MAX_SNAPSHOT_CHUNKS as u64 * pack::MAX_CHUNK_SIZE as u64,
+            "decoded snapshot exceeds size limit"
+        );
+        ensure!(
+            recipe
+                .container
+                .as_deref()
+                .is_none_or(|c| c == native::PROFILE),
+            "unknown native reconstruction profile"
+        );
+        if recipe.container.is_some() {
+            ensure!(
+                recipe.decoded_bytes <= native::MAX_DECODED,
+                "native normalization exceeds size limit"
+            );
+        } else {
+            ensure!(
+                recipe.decoded_bytes == m.bytes && recipe.decoded_hash == m.content_hash,
+                "raw recipe identity mismatch"
+            );
+        }
+        let mut used = vec![false; m.chunks.len()];
+        for [index, offset, len, flags] in &recipe.operations {
+            let chunk = m
+                .chunks
+                .get(*index as usize)
+                .context("recipe chunk index out of bounds")?;
+            ensure!(
+                *len > 0 && offset.checked_add(*len).is_some_and(|n| n <= chunk.len),
+                "recipe slice out of bounds"
+            );
+            structure::validate_flags(*flags)?;
+            used[*index as usize] = true;
+        }
+        ensure!(used.iter().all(|u| *u), "unreferenced recipe chunk");
+    } else {
+        ensure!(
+            total == m.bytes,
+            "manifest chunk lengths do not match snapshot size"
+        );
+    }
     ensure!(
         m.bytes <= i64::MAX as u64,
         "snapshot exceeds catalog size limit"
@@ -312,14 +372,7 @@ impl Vault {
             "manifests" => {
                 let m = decode_manifest(bytes, id)?;
                 let mut cache = PackCache::default();
-                let mut hash = blake3::Hasher::new();
-                for c in &m.chunks {
-                    hash.update(pack::extract_chunk(cache.get(self, &c.pack)?, c)?);
-                }
-                ensure!(
-                    hash.finalize().to_hex().as_str() == m.content_hash,
-                    "snapshot content hash mismatch"
-                );
+                self.export_manifest(&m, &mut std::io::sink(), &mut cache)?;
                 let created = pack::atomic_write_immutable(&self.manifest_path(id)?, bytes)?;
                 self.db.execute_batch("BEGIN IMMEDIATE")?;
                 match self.insert_manifest(id, &m) {
@@ -595,6 +648,33 @@ impl Vault {
                 "source is not a regular file: {}",
                 path.display()
             );
+            let origin = path
+                .to_str()
+                .context("source paths must be valid UTF-8; rename this file before capture")?
+                .to_owned();
+            let latest: Option<(String,u64)> = self.db.query_row("SELECT content_hash,revision FROM snapshots WHERE device_id=?1 AND origin=?2 ORDER BY revision DESC,captured_at DESC,id DESC LIMIT 1", params![self.config.device_id, origin], |r|Ok((r.get(0)?,r.get(1)?))).optional()?;
+            // Check identity before writing transformed chunks. Otherwise an
+            // unchanged legacy snapshot could leave a full orphaned v2 encoding.
+            let mut observed = blake3::Hasher::new();
+            let observed_size = std::io::copy(
+                &mut Read::by_ref(&mut file).take(initial.len()),
+                &mut observed,
+            )?;
+            ensure!(
+                observed_size == initial.len(),
+                "source was truncated during capture"
+            );
+            let observed_hash = observed.finalize().to_hex().to_string();
+            file.rewind()?;
+            if latest
+                .as_ref()
+                .is_some_and(|(hash, _)| hash == &observed_hash)
+            {
+                self.observe_stable(&path, &initial, source_override)?;
+                report.input_bytes += initial.len();
+                report.unchanged += 1;
+                continue;
+            }
             let source = if source_override == Source::Auto {
                 if candidate.source == Source::Generic {
                     Source::Auto
@@ -610,80 +690,90 @@ impl Vault {
                 &path,
             )?;
             file.rewind()?;
-            let mut reader = if adapters::is_zstd_source(&path) {
-                Chunker::new_fixed(file.take(initial.len()))
+            let compressed = adapters::is_zstd_source(&path);
+            let prepared = if compressed {
+                native::prepare(&mut file, initial.len(), &self.root)?
             } else {
-                Chunker::new(file.take(initial.len()))
+                None
             };
-            let mut hasher = blake3::Hasher::new();
+            let structural = prepared.is_some() || (!compressed && initial.len() >= 4096);
             let mut hashes = Vec::new();
-            let mut size = 0u64;
-            while let Some(chunk) = reader.next_chunk()? {
-                ensure!(
-                    hashes.len() < MAX_SNAPSHOT_CHUNKS,
-                    "source exceeds snapshot chunk-reference limit"
-                );
-                hasher.update(&chunk);
-                size += chunk.len() as u64;
-                let hash = blake3::hash(&chunk).to_hex().to_string();
-                let exists = if pending_chunks.contains_key(&hash) {
-                    true
-                } else {
-                    let old_pack: Option<String> = self
-                        .db
-                        .prepare_cached("SELECT pack FROM chunks WHERE hash=?1")?
-                        .query_row([&hash], |r| r.get(0))
-                        .optional()?;
-                    if let Some(id) = old_pack {
-                        if checked_packs.insert(id.clone()) {
-                            ensure!(self.pack_path(&id)?.is_file(),"catalog references missing pack {id}; restore missing objects with `nenia pull` before capturing more snapshots");
-                        }
-                        true
-                    } else {
-                        false
-                    }
+            let (recipe, size, content_hash) = if structural {
+                let (reader, native_hash): (Box<dyn Read>, Option<String>) = match prepared {
+                    Some(prepared) => (Box::new(prepared.file), Some(prepared.original_hash)),
+                    None => (Box::new(file.take(initial.len())), None),
                 };
-                if !exists {
-                    if !builder.can_fit(chunk.len()) {
-                        self.flush_pack(&mut builder, &mut pending_chunks, report)?;
+                let mut local = HashMap::new();
+                let mut recipe = structure::encode(reader, |chunk| {
+                    let hash = self.stage_chunk(
+                        chunk,
+                        &mut builder,
+                        &mut pending_chunks,
+                        &mut checked_packs,
+                        report,
+                    )?;
+                    if let Some(index) = local.get(&hash) {
+                        return Ok(*index);
                     }
-                    let offset = builder.add(&chunk)?;
-                    pending_chunks.insert(hash.clone(), (offset, chunk.len() as u32));
-                    report.new_chunk_bytes += chunk.len() as u64;
+                    ensure!(
+                        hashes.len() < MAX_SNAPSHOT_CHUNKS,
+                        "source exceeds snapshot chunk-reference limit"
+                    );
+                    let index = hashes.len() as u32;
+                    hashes.push(hash.clone());
+                    local.insert(hash, index);
+                    Ok(index)
+                })?;
+                let (size, content_hash) = if let Some(hash) = native_hash {
+                    recipe.container = Some(native::PROFILE.into());
+                    (initial.len(), hash)
+                } else {
+                    (recipe.decoded_bytes, recipe.decoded_hash.clone())
+                };
+                (Some(recipe), size, content_hash)
+            } else {
+                let reader = if compressed {
+                    Chunker::new_fixed(file.take(initial.len()))
+                } else {
+                    Chunker::new(file.take(initial.len()))
+                };
+                let mut hash = blake3::Hasher::new();
+                let mut size = 0;
+                for chunk in reader {
+                    let chunk = chunk?;
+                    ensure!(
+                        hashes.len() < MAX_SNAPSHOT_CHUNKS,
+                        "source exceeds snapshot chunk-reference limit"
+                    );
+                    hash.update(&chunk);
+                    size += chunk.len() as u64;
+                    hashes.push(self.stage_chunk(
+                        &chunk,
+                        &mut builder,
+                        &mut pending_chunks,
+                        &mut checked_packs,
+                        report,
+                    )?);
                 }
-                hashes.push(hash);
-            }
+                (None, size, hash.finalize().to_hex().to_string())
+            };
             ensure!(
                 size == initial.len(),
                 "source was truncated during capture: {}",
                 path.display()
             );
-            let content_hash = hasher.finalize().to_hex().to_string();
-            let origin = path
-                .to_str()
-                .context("source paths must be valid UTF-8; rename this file before capture")?
-                .to_owned();
-            let latest: Option<(String,u64)> = self.db.query_row("SELECT content_hash,revision FROM snapshots WHERE device_id=?1 AND origin=?2 ORDER BY revision DESC,captured_at DESC,id DESC LIMIT 1", params![self.config.device_id, origin], |r|Ok((r.get(0)?,r.get(1)?))).optional()?;
-            let exists = latest
-                .as_ref()
-                .is_some_and(|(hash, _)| hash == &content_hash);
+            ensure!(
+                content_hash == observed_hash,
+                "source changed during capture; retry this file"
+            );
             let revision = latest.map_or(1, |(_, revision)| revision + 1);
             report.input_bytes += size;
-            if let Ok(final_stat) = fs::metadata(&path) {
-                if initial.len() == final_stat.len()
-                    && initial.modified()? == final_stat.modified()?
-                {
-                    self.db.execute("INSERT OR REPLACE INTO observations(device_id,origin,source,bytes,modified) VALUES(?1,?2,?3,?4,?5)",params![self.config.device_id,origin,source_name(source_override),size,modified_key(&final_stat)?])?;
-                }
-            }
-            if exists {
-                report.unchanged += 1;
-                continue;
-            }
+            self.observe_stable(&path, &initial, source_override)?;
             pending_references += hashes.len();
             pending.push((
                 Manifest {
-                    version: 1,
+                    version: if recipe.is_some() { 2 } else { 1 },
+                    recipe,
                     revision,
                     device_id: self.config.device_id.clone(),
                     origin,
@@ -703,6 +793,48 @@ impl Vault {
         }
         self.flush_pack(&mut builder, &mut pending_chunks, report)?;
         self.publish_snapshots(&mut pending, report)
+    }
+
+    fn observe_stable(&self, path: &Path, initial: &fs::Metadata, source: Source) -> Result<()> {
+        if let Ok(final_stat) = fs::metadata(path) {
+            if initial.len() == final_stat.len() && initial.modified()? == final_stat.modified()? {
+                self.db.execute("INSERT OR REPLACE INTO observations(device_id,origin,source,bytes,modified) VALUES(?1,?2,?3,?4,?5)",
+                    params![self.config.device_id, path.to_str(), source_name(source), initial.len(), modified_key(&final_stat)?])?;
+            }
+        }
+        Ok(())
+    }
+
+    fn stage_chunk(
+        &self,
+        chunk: &[u8],
+        builder: &mut PackBuilder,
+        pending: &mut HashMap<String, (u64, u32)>,
+        checked: &mut std::collections::HashSet<String>,
+        report: &mut IngestReport,
+    ) -> Result<String> {
+        let hash = blake3::hash(chunk).to_hex().to_string();
+        if pending.contains_key(&hash) {
+            return Ok(hash);
+        }
+        let old_pack: Option<String> = self
+            .db
+            .prepare_cached("SELECT pack FROM chunks WHERE hash=?1")?
+            .query_row([&hash], |r| r.get(0))
+            .optional()?;
+        if let Some(id) = old_pack {
+            if checked.insert(id.clone()) {
+                ensure!(self.pack_path(&id)?.is_file(), "catalog references missing pack {id}; restore missing objects with `nenia pull` before capturing more snapshots");
+            }
+        } else {
+            if !builder.can_fit(chunk.len()) {
+                self.flush_pack(builder, pending, report)?;
+            }
+            let offset = builder.add(chunk)?;
+            pending.insert(hash.clone(), (offset, chunk.len() as u32));
+            report.new_chunk_bytes += chunk.len() as u64;
+        }
+        Ok(hash)
     }
 
     fn publish_snapshots(
@@ -770,7 +902,13 @@ impl Vault {
 
     fn save_manifest(&self, manifest: &Manifest) -> Result<String> {
         validate_manifest(manifest)?;
-        let raw = serde_json::to_vec(manifest)?;
+        let mut stored = manifest.clone();
+        if stored.version == 2 {
+            for chunk in &mut stored.chunks {
+                chunk.hash.clear();
+            }
+        }
+        let raw = serde_json::to_vec(&stored)?;
         ensure!(
             raw.len() <= MAX_MANIFEST_SIZE,
             "snapshot has too many chunks for manifest format"
@@ -794,10 +932,18 @@ impl Vault {
         }
         self.register_object("manifests", id)?;
         self.db.execute("INSERT OR IGNORE INTO snapshots(id,device_id,origin,captured_at,content_hash,bytes,source,session_id,title,events,revision) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)", params![id,m.device_id,m.origin,m.captured_at,m.content_hash,m.bytes,source_name(m.metadata.source),m.metadata.session_id,m.metadata.title,m.metadata.events,m.revision])?;
+        let mut cache = PackCache::default();
         for c in &m.chunks {
+            let hash = if c.hash.is_empty() {
+                blake3::hash(pack::extract_chunk(cache.get(self, &c.pack)?, c)?)
+                    .to_hex()
+                    .to_string()
+            } else {
+                c.hash.clone()
+            };
             self.db.execute(
                 "INSERT OR IGNORE INTO chunks(hash,pack,offset,len) VALUES(?1,?2,?3,?4)",
-                params![c.hash, c.pack, c.offset, c.len],
+                params![hash, c.pack, c.offset, c.len],
             )?;
         }
         Ok(())
@@ -877,16 +1023,43 @@ impl Vault {
     pub fn export<W: Write>(&self, id: &str, out: &mut W) -> Result<()> {
         let m = self.manifest(id)?;
         let mut cache = PackCache::default();
-        let mut hash = blake3::Hasher::new();
-        for c in &m.chunks {
-            let raw = cache.get(self, &c.pack)?;
-            let bytes = pack::extract_chunk(raw, c)?;
-            hash.update(bytes);
-            out.write_all(bytes)?;
+        self.export_manifest(&m, out, &mut cache)
+    }
+
+    /// Read a trace as plaintext, independent of its native compression wrapper.
+    /// Ordinary export/restore still reproduce the exact original container.
+    pub fn export_decoded<W: Write>(&self, id: &str, out: &mut W) -> Result<()> {
+        let m = self.manifest(id)?;
+        let mut cache = PackCache::default();
+        let mut reader = SnapshotReader::new(self, &mut cache, &m);
+        if m.recipe.is_none() && adapters::is_zstd_source(Path::new(&m.origin)) {
+            let mut decoder = zstd::stream::read::Decoder::new(reader)?;
+            decoder.window_log_max(26)?;
+            std::io::copy(&mut decoder, out)?;
+        } else {
+            std::io::copy(&mut reader, out)?;
+        }
+        Ok(())
+    }
+
+    fn export_manifest<W: Write>(
+        &self,
+        m: &Manifest,
+        out: &mut W,
+        cache: &mut PackCache,
+    ) -> Result<()> {
+        let mut reader = SnapshotReader::new(self, cache, m);
+        let mut output = native::HashWrite::new(out);
+        if let Some(recipe) = m.recipe.as_ref().filter(|r| r.container.is_some()) {
+            let mut encoder = native::encoder(&mut output, recipe.decoded_bytes)?;
+            std::io::copy(&mut reader, &mut encoder)?;
+            encoder.finish()?;
+        } else {
+            std::io::copy(&mut reader, &mut output)?;
         }
         ensure!(
-            hash.finalize().to_hex().as_str() == m.content_hash,
-            "snapshot content hash mismatch: {id}"
+            output.bytes == m.bytes && output.hash.finalize().to_hex().as_str() == m.content_hash,
+            "snapshot content hash mismatch"
         );
         Ok(())
     }
@@ -924,16 +1097,15 @@ impl Vault {
         let mut cache = PackCache::default();
         for (rowid, id) in ids {
             let m = self.manifest(&id)?;
-            let reader = SnapshotReader {
-                vault: self,
-                cache: &mut cache,
-                chunks: m.chunks.iter(),
-                current: Vec::new(),
-                position: 0,
-                hash: blake3::Hasher::new(),
-                expected: &m.content_hash,
+            let reader = SnapshotReader::new(self, &mut cache, &m);
+            // Recipes expose the decoded JSON directly; indexing must not
+            // regenerate and then decompress the native container again.
+            let path = if m.recipe.is_some() {
+                Path::new("snapshot.jsonl")
+            } else {
+                Path::new(&m.origin)
             };
-            let mut text = adapters::index_source(reader, max_bytes, Path::new(&m.origin))?;
+            let mut text = adapters::index_source(reader, max_bytes, path)?;
             text.push_str(&format!(
                 " {} {} {}",
                 m.origin,
@@ -1007,15 +1179,10 @@ impl Vault {
         let mut cache = PackCache::default();
         for id in self.object_ids("manifests", ".json.zst")? {
             let m = self.manifest(&id)?;
-            let mut hash = blake3::Hasher::new();
-            for c in &m.chunks {
-                referenced.insert(c.pack.clone());
-                hash.update(pack::extract_chunk(cache.get(self, &c.pack)?, c)?);
+            for chunk in &m.chunks {
+                referenced.insert(chunk.pack.clone());
             }
-            ensure!(
-                hash.finalize().to_hex().as_str() == m.content_hash,
-                "snapshot content hash mismatch: {id}"
-            );
+            self.export_manifest(&m, &mut std::io::sink(), &mut cache)?;
             report.snapshots += 1;
             report.checked_bytes += m.bytes;
         }
@@ -1159,7 +1326,7 @@ impl PackCache {
         if let Some(index) = self.entries.iter().position(|(key, _)| key == id) {
             self.entries.swap(0, index);
         } else {
-            if self.entries.len() == 2 {
+            if self.entries.len() == 8 {
                 self.entries.pop();
             }
             let encoded = read_bounded(&vault.pack_path(id)?, pack::MAX_PACK_RAW_SIZE + 65536)?;
@@ -1170,41 +1337,74 @@ impl PackCache {
     }
 }
 
-/// Reads verified chunks lazily; optional indexing never materializes a whole trace.
+/// A bounded pull reader over either legacy chunks or a lexical recipe.
 struct SnapshotReader<'a> {
     vault: &'a Vault,
     cache: &'a mut PackCache,
-    chunks: std::slice::Iter<'a, ChunkRef>,
+    manifest: &'a Manifest,
+    next: usize,
     current: Vec<u8>,
     position: usize,
     hash: blake3::Hasher,
-    expected: &'a str,
+    bytes: u64,
 }
-
+impl<'a> SnapshotReader<'a> {
+    fn new(vault: &'a Vault, cache: &'a mut PackCache, manifest: &'a Manifest) -> Self {
+        Self {
+            vault,
+            cache,
+            manifest,
+            next: 0,
+            current: Vec::new(),
+            position: 0,
+            hash: blake3::Hasher::new(),
+            bytes: 0,
+        }
+    }
+    fn advance(&mut self) -> Result<bool> {
+        let m = self.manifest;
+        let (chunk, slice) = if let Some(recipe) = &m.recipe {
+            match recipe.operations.get(self.next) {
+                Some([index, offset, len, flags]) => {
+                    (m.chunks.get(*index as usize), Some((*offset, *len, *flags)))
+                }
+                None => (None, None),
+            }
+        } else {
+            (m.chunks.get(self.next), None)
+        };
+        let (size, expected) = m.recipe.as_ref().map_or((m.bytes, &m.content_hash), |r| {
+            (r.decoded_bytes, &r.decoded_hash)
+        });
+        let Some(chunk) = chunk else {
+            ensure!(
+                self.bytes == size && self.hash.finalize().to_hex().as_str() == expected,
+                "snapshot content hash mismatch"
+            );
+            return Ok(false);
+        };
+        let raw = pack::extract_chunk(self.cache.get(self.vault, &chunk.pack)?, chunk)?;
+        self.current = if let Some((offset, len, flags)) = slice {
+            structure::expand(&raw[offset as usize..offset as usize + len as usize], flags)?
+        } else {
+            raw.to_vec()
+        };
+        self.bytes += self.current.len() as u64;
+        ensure!(self.bytes <= size, "recipe exceeds declared output size");
+        self.hash.update(&self.current);
+        self.position = 0;
+        self.next += 1;
+        Ok(true)
+    }
+}
 impl Read for SnapshotReader<'_> {
     fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
         if out.is_empty() {
             return Ok(0);
         }
-        if self.position == self.current.len() {
-            match self.chunks.next() {
-                Some(chunk) => {
-                    let raw = self
-                        .cache
-                        .get(self.vault, &chunk.pack)
-                        .map_err(std::io::Error::other)?;
-                    let bytes = pack::extract_chunk(raw, chunk).map_err(std::io::Error::other)?;
-                    self.hash.update(bytes);
-                    self.current.clear();
-                    self.current.extend_from_slice(bytes);
-                    self.position = 0;
-                }
-                None => {
-                    if self.hash.finalize().to_hex().as_str() != self.expected {
-                        return Err(std::io::Error::other("snapshot content hash mismatch"));
-                    }
-                    return Ok(0);
-                }
+        while self.position == self.current.len() {
+            if !self.advance().map_err(std::io::Error::other)? {
+                return Ok(0);
             }
         }
         let n = out.len().min(self.current.len() - self.position);

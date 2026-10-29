@@ -1,4 +1,4 @@
-# Nenia archive format 1
+# Nenia archive formats
 
 The archive consists only of `packs/<id>.nz` and `manifests/<id>.json.zst`.
 An object ID is the lowercase, 64-character hexadecimal BLAKE3 hash of the
@@ -30,7 +30,7 @@ the chunker or its table: manifests supply every offset and length. A future
 chunking policy can therefore coexist with current readers without recompressing
 old objects. The current writer is specified in `src/pack.rs`.
 
-## Manifest
+## Version 1 manifest
 
 A manifest is a Zstd-compressed UTF-8 JSON object. Its ID hashes the compressed
 bytes. Encoded and decoded manifests are bounded to 64 MiB; the decoder's window
@@ -82,6 +82,92 @@ verify the total byte length and whole-file BLAKE3. No JSON normalization occurs
 CRLF, trailing whitespace, malformed records, binary bytes, and a missing final
 newline remain exactly as captured. Original paths must be valid UTF-8; unsupported
 path names are rejected instead of being merged through lossy conversion.
+
+## Version 2: reversible trace factoring
+
+Pack files keep format 1. Manifest version 2 uses a unique chunk table and a
+lexical reconstruction recipe. A chunk is `[pack_id, offset, length]`; its pack's
+BLAKE3 authenticates the complete bytes, so an additional plaintext chunk hash is
+redundant. Recovery recomputes plaintext hashes for the disposable dedup index.
+Version-1 manifests must still carry their original chunk hashes.
+
+A version-2 manifest retains all version-1 identity/metadata fields, replaces the
+chunk list with compact references, and adds:
+
+```json
+{
+  "recipe": {
+    "decoded_bytes": 12345,
+    "decoded_hash": "BLAKE3 of the reconstructed JSONL bytes",
+    "operations": [[0, 0, 256, 1]],
+    "container": "zstd-1.5.7-stream3"
+  }
+}
+```
+
+Each operation is `[chunk_index, slice_offset, slice_length, flags]`. Authenticate
+and decode the containing pack, take the referenced chunk, then take the operation's
+slice. Operations address only the chunk table, never other operations or files.
+There are no recursive archive references or dependencies on earlier snapshots.
+All chunks must be referenced. Empty slices, invalid ranges and unknown flags fail.
+
+Flags are unsigned integers 0..63:
+
+- Bits 0..2: JSON escaping depth, restricted to 0..3. Escape double quotes,
+  backslashes and control bytes exactly as compact `serde_json` strings do, without
+  surrounding quotes; non-ASCII UTF-8 bytes are unchanged. Repeat for each layer.
+- Bit 3: first encode the slice as canonical base64.
+- Bit 4: use the URL-safe alphabet instead of the standard alphabet.
+- Bit 5: omit base64 padding. Bits 4/5 require bit 3.
+
+Base64 encoding precedes JSON escaping. Concatenate operation outputs, check
+`decoded_bytes` and `decoded_hash`. Without `container`, those must equal the
+manifest's original `bytes` and `content_hash`.
+
+The writer factors canonical strings at least 256 bytes long, including nested
+JSON strings, to a maximum depth of three. Unknown fields and noncanonical spelling
+stay literal. Content-defined boundaries are 8/32/256 KiB minimum/average/maximum.
+For binary values, four-character literal bridges reconstruct base64 triplets that
+cross chunk boundaries. This allows binary deduplication at arbitrary offsets with
+no carry state in the reader. The algorithm does not depend on provider field names.
+
+### Native Codex Zstd reconstruction
+
+`container` is absent or exactly `zstd-1.5.7-stream3`. For this profile, feed the
+reconstructed bytes to the **Zstd 1.5.7 streaming encoder**, level 3, default
+single-thread parameters, no checksum or dictionary, with pledged source size
+`decoded_bytes`. Finish once without intermediate flushes. Verify the resulting
+length and BLAKE3 against the manifest's original identity.
+
+This matches the [Codex writer](https://github.com/openai/codex/blob/main/codex-rs/rollout/src/compression.rs).
+The writer proves the entire original compressed stream matches this profile
+**before** selecting it. Different encoders, parameters, malformed containers and
+streams outside the normalization budget retain the opaque version-1 path.
+The historical encoder is part of the read contract: dependencies are pinned,
+the runtime checks the linked codec version, and a fixed compatibility digest is
+checked on native Linux, macOS and Windows. A future codec upgrade must retain this
+implementation for existing profiles. A generic newer Zstd encoder is not a substitute.
+
+### Bounds and upgrades
+
+The manifest remains bounded to 64 MiB decoded/encoded, with at most 262,144 unique
+chunks and 2,000,000 operations. Output cannot exceed its declared size or 64 GiB.
+Native normalization is limited to 2 GiB decoded with a 64 MiB Zstd window. Capture
+uses an anonymous private temporary file for this decoded native stream; it is
+removed when capture closes it. Raw lexical processing uses at most 32 MiB source
+segments; oversized portions stay literal. The pack cache holds at most eight
+8 MiB decoded packs. Escaping expansion is bounded by one 256 KiB chunk and three
+escape layers, independently of the source file's total size.
+
+Readers accept versions 1 and 2. **Upgrade the server before clients.** Older
+servers reject version 2 instead of accepting an unreadable snapshot. Existing
+objects are immutable and are not rewritten or deleted automatically. A full scan
+of unchanged legacy snapshots does not create unused transformed objects. Fresh
+captures use version 2 for raw inputs of at least 4 KiB and proven native containers;
+small raw files retain version 1.
+
+`nenia cat SNAPSHOT --decoded` exposes JSONL directly, including from legacy native
+containers. `cat` without this flag and `restore` always reproduce original bytes.
 
 ## Publication and recovery
 

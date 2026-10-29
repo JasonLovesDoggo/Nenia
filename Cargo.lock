@@ -1039,6 +1039,7 @@ dependencies = [
  "walkdir",
  "windows-sys 0.61.2",
  "zstd",
+ "zstd-sys",
 ]
 
 [[package]]

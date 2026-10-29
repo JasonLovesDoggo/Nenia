@@ -76,6 +76,10 @@ fn native_compressed_traces_are_discovered_searchable_and_restored_as_original_c
                 .is_empty());
             malformed.as_slice()
         } else {
+            assert_eq!(
+                cli(&home, &root, &["cat", id, "--decoded"]).stdout,
+                raw.as_bytes()
+            );
             assert_eq!(manifest["metadata"]["session_id"], "native-zstd-session");
             assert_eq!(manifest["metadata"]["title"], "Native trace archive");
             encoded.as_slice()

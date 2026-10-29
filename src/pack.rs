@@ -44,11 +44,64 @@ const fn gear_table() -> [u64; 256] {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "StoredChunk", into = "StoredChunk")]
 pub struct ChunkRef {
     pub hash: String,
     pub pack: String,
     pub offset: u64,
     pub len: u32,
+}
+
+// Version 2 omits the redundant plaintext hash. Pack authentication and the
+// snapshot's final hash cover every referenced byte; the disposable dedup index
+// recomputes chunk hashes during recovery. Legacy references keep their hashes.
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+enum StoredChunk {
+    Compact(String, u64, u32),
+    Legacy {
+        hash: String,
+        pack: String,
+        offset: u64,
+        len: u32,
+    },
+}
+impl From<StoredChunk> for ChunkRef {
+    fn from(value: StoredChunk) -> Self {
+        match value {
+            StoredChunk::Compact(pack, offset, len) => Self {
+                hash: String::new(),
+                pack,
+                offset,
+                len,
+            },
+            StoredChunk::Legacy {
+                hash,
+                pack,
+                offset,
+                len,
+            } => Self {
+                hash,
+                pack,
+                offset,
+                len,
+            },
+        }
+    }
+}
+impl From<ChunkRef> for StoredChunk {
+    fn from(c: ChunkRef) -> Self {
+        if c.hash.is_empty() {
+            Self::Compact(c.pack, c.offset, c.len)
+        } else {
+            Self::Legacy {
+                hash: c.hash,
+                pack: c.pack,
+                offset: c.offset,
+                len: c.len,
+            }
+        }
+    }
 }
 
 /// Streaming Gear-hash chunker with bounded memory and deterministic boundaries.
@@ -275,7 +328,9 @@ pub fn decode_pack(encoded: &[u8], expected_id: &str) -> Result<Vec<u8>> {
 /// Extract and verify one chunk from an already authenticated, decoded pack.
 /// The caller must have passed `reference.pack` to `decode_pack`.
 pub fn extract_chunk<'a>(raw: &'a [u8], reference: &ChunkRef) -> Result<&'a [u8]> {
-    validate_hash_id(&reference.hash)?;
+    if !reference.hash.is_empty() {
+        validate_hash_id(&reference.hash)?;
+    }
     validate_hash_id(&reference.pack)?;
     ensure!(
         raw.len() <= MAX_PACK_RAW_SIZE,
@@ -292,7 +347,7 @@ pub fn extract_chunk<'a>(raw: &'a [u8], reference: &ChunkRef) -> Result<&'a [u8]
         .context("chunk range overflow")?;
     let chunk = raw.get(start..end).context("chunk range is outside pack")?;
     ensure!(
-        blake3::hash(chunk).to_hex().as_str() == reference.hash,
+        reference.hash.is_empty() || blake3::hash(chunk).to_hex().as_str() == reference.hash,
         "chunk hash mismatch"
     );
     Ok(chunk)

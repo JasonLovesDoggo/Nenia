@@ -172,7 +172,12 @@ enum Commands {
         output: PathBuf,
     },
     /// Write exact original bytes to stdout.
-    Cat { snapshot: String },
+    Cat {
+        snapshot: String,
+        /// Read JSONL directly, even when the original was a native Zstd file.
+        #[arg(long)]
+        decoded: bool,
+    },
     /// Build the optional contentless full-text index.
     Index {
         #[arg(long, default_value_t = 8)]
@@ -539,9 +544,14 @@ async fn run() -> Result<()> {
             v.export_file(&v.resolve(&snapshot)?, &output)?;
             eprintln!("Restored {}", output.display());
         }
-        Commands::Cat { snapshot } => {
+        Commands::Cat { snapshot, decoded } => {
             let v = Vault::open(&root)?;
-            v.export(&v.resolve(&snapshot)?, &mut io::stdout().lock())?;
+            let id = v.resolve(&snapshot)?;
+            if decoded {
+                v.export_decoded(&id, &mut io::stdout().lock())?;
+            } else {
+                v.export(&id, &mut io::stdout().lock())?;
+            }
         }
         Commands::Index { max_text_mib } => {
             let mut v = Vault::open(&root)?;

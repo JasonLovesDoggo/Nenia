@@ -29,6 +29,7 @@ impl Fixture {
         let manifest = Manifest {
             revision: 1,
             version: 1,
+            recipe: None,
             device_id: "test-device".into(),
             origin: "laptop:session.jsonl".into(),
             captured_at: "2026-10-27T21:00:00Z".into(),
